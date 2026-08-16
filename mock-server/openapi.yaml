@@ -1,0 +1,712 @@
+openapi: 3.0.0
+info:
+  title: Smart Clinic OS API Specification (SCS)
+  description: |
+    المستند البرمجي لواجهات برمجة التطبيقات (API Specification) لمنصة عيادتي الذكية.
+    يحتوي الملف على مسارين أساسيين:
+    1. **واجهات الأوبريشن والمشغل (Platform Operations):** تبدأ بـ `/admin/v1` ومحمية بـ VPN.
+    2. **واجهات العيادات والعملاء (Clinic Dashboard):** تبدأ بـ `/v1` وتعتمد على ترويسة العيادة.
+  version: 1.0.0
+servers:
+  - url: https://api.SCS-admin.com
+    description: Public Clinic Dashboard Gateway
+  - url: https://api.SCS-ops.com
+    description: Private Operations Gateway (Accessible via VPN only)
+  - url: http://localhost:3000
+    description: Local Mock Development Server
+paths:
+  # --- Platform Admin Routes ---
+  /admin/v1/auth/login:
+    post:
+      summary: تسجيل دخول مدير المنصة (Platform Admin Login)
+      description: تسجيل الدخول للوحة تحكم الأوبريشن باستخدام البريد الإلكتروني وكلمة المرور.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  example: ops@SCS-ops.com
+                password:
+                  type: string
+                  example: SecurePassword123!
+      responses:
+        '200':
+          description: نجاح طلب الدخول وتوليد كود التحقق الثنائي (2FA)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      two_factor_required:
+                        type: boolean
+                        example: true
+                      temp_token:
+                        type: string
+                        example: temp_jwt_token_for_2fa
+
+  /admin/v1/auth/verify-2fa:
+    post:
+      summary: التحقق من كود التحقق الثنائي (Verify 2FA)
+      description: إكمال عملية تسجيل الدخول للأدمن باستخدام كود OTP المرسل على الهاتف.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - temp_token
+                - otp_code
+              properties:
+                temp_token:
+                  type: string
+                  example: temp_jwt_token_for_2fa
+                otp_code:
+                  type: string
+                  example: "123456"
+      responses:
+        '200':
+          description: تسجيل دخول ناجح وإصدار الـ Tokens
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      admin:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            example: admin-uuid-12345
+                          email:
+                            type: string
+                            example: ops@SCS-ops.com
+                          full_name:
+                            type: string
+                            example: أحمد مشغل النظام
+                          role:
+                            type: string
+                            example: super_admin
+                      access_token:
+                        type: string
+                        example: jwt_access_token_here
+                      refresh_token:
+                        type: string
+                        example: jwt_refresh_token_here
+
+  /admin/v1/tenants:
+    post:
+      summary: إنشاء عيادة جديدة وتفعيل حساب الطبيب (Onboard Tenant)
+      description: يقوم مشغل المنصة بإنشاء مستأجر جديد (عيادة) وربطه بخطة اشتراك.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - slug
+                - specialty
+                - email
+                - phone
+                - subscription_plan
+              properties:
+                name:
+                  type: string
+                  example: عيادة النور لطب الأسنان
+                slug:
+                  type: string
+                  example: dr-mohamed-noor
+                specialty:
+                  type: string
+                  example: dental
+                email:
+                  type: string
+                  example: clinic_info@noor.com
+                phone:
+                  type: string
+                  example: "+201012345678"
+                subscription_plan:
+                  type: string
+                  example: pro
+                allow_multi_doctor:
+                  type: boolean
+                  example: true
+                allow_insurance:
+                  type: boolean
+                  example: true
+      responses:
+        '201':
+          description: تم إنشاء العيادة وإرسال بريد تفعيل للطبيب
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      tenant_id:
+                        type: string
+                        example: tenant-uuid-abcde
+                      doctor_id:
+                        type: string
+                        example: doctor-uuid-12345
+                      activation_link:
+                        type: string
+                        example: https://www.SCS-admin.com/activate?token=activation_token_hash
+
+    get:
+      summary: عرض وإحصائيات العيادات (List Tenants & Analytics)
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, suspended]
+      responses:
+        '200':
+          description: قائمة بالعيادات المسجلة
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      tenants:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                              example: tenant-uuid-abcde
+                            name:
+                              type: string
+                              example: عيادة النور
+                            slug:
+                              type: string
+                              example: dr-mohamed-noor
+                            status:
+                              type: string
+                              example: active
+                            subscription_plan:
+                              type: string
+                              example: pro
+                            expires_at:
+                              type: string
+                              example: "2027-07-01T20:00:00Z"
+
+  # --- Clinic Staff Routes ---
+  /v1/staff:
+    post:
+      summary: إضافة حساب سكرتير جديد (Add Clinic Secretary)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - full_name
+                - email
+                - phone
+                - permissions
+              properties:
+                full_name:
+                  type: string
+                  example: سارة أحمد
+                email:
+                  type: string
+                  example: sara@noor.com
+                phone:
+                  type: string
+                  example: "+201211112222"
+                permissions:
+                  type: array
+                  items:
+                    type: string
+                  example: ["calendar:read", "calendar:write", "patients:read"]
+      responses:
+        '201':
+          description: تم تسجيل حساب السكرتير وإرسال دعوة له
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      staff_id:
+                        type: string
+                        example: staff-uuid-67890
+                      role:
+                        type: string
+                        example: secretary
+                      invitation_sent:
+                        type: boolean
+                        example: true
+
+  /v1/staff/{id}/permissions:
+    put:
+      summary: تعديل صلاحيات السكرتير (Update Permissions)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - permissions
+              properties:
+                permissions:
+                  type: array
+                  items:
+                    type: string
+                  example: ["calendar:read", "patients:read"]
+      responses:
+        '200':
+          description: نجاح تعديل الصلاحيات
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      staff_id:
+                        type: string
+                      updated_permissions:
+                        type: array
+                        items:
+                          type: string
+
+  /v1/chats/{conversation_id}/toggle-bot:
+    post:
+      summary: تفعيل/تعطيل البوت يدوياً (Toggle Chat Bot Manual Takeover)
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - manual_mode
+              properties:
+                manual_mode:
+                  type: boolean
+                  example: true
+      responses:
+        '200':
+          description: تم تبديل التحكم بنجاح
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      conversation_id:
+                        type: string
+                      bot_active:
+                        type: boolean
+                        example: false
+                      manual_mode_expires_at:
+                        type: string
+                        example: "2026-07-01T23:00:00Z"
+
+  /v1/appointments/{appointment_id}/consultation:
+    post:
+      summary: كتابة التشخيص واعتماد الروشتة (E-Prescription & SOAP Notes)
+      parameters:
+        - name: appointment_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - subjective
+                - objective
+                - diagnosis_icd11
+                - prescription_items
+              properties:
+                subjective:
+                  type: string
+                  example: يعاني المريض من ألم شديد في الضرس الخلفي السفلي
+                objective:
+                  type: object
+                  properties:
+                    blood_pressure:
+                      type: string
+                      example: 120/80
+                    pulse:
+                      type: integer
+                      example: 72
+                diagnosis_icd11:
+                  type: string
+                  example: DA01.1 - Dental caries extending into dentine
+                prescription_items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      medication_name:
+                        type: string
+                        example: Amoxicillin 500mg
+                      dosage:
+                        type: string
+                        example: كبسولة واحدة كل 8 ساعات
+                      duration:
+                        type: string
+                        example: 5 أيام
+      responses:
+        '200':
+          description: تم اعتماد الزيارة وتوليد الروشتة وإرسالها
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      medical_record_id:
+                        type: string
+                        example: record-uuid-11111
+                      prescription_id:
+                        type: string
+                        example: prescription-uuid-22222
+                      pdf_url:
+                        type: string
+                        example: https://storage.SCS-admin.com/tenant-id/prescriptions/rx-2026-0001.pdf
+                      whatsapp_status:
+                        type: string
+                        example: enqueued
+
+  /v1/sync:
+    post:
+      summary: مزامنة بيانات الأوفلاين وحل النزاعات (Offline Bulk Sync)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - actions
+              properties:
+                actions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      action_id:
+                        type: string
+                      action_type:
+                        type: string
+                      timestamp:
+                        type: string
+                      payload:
+                        type: object
+      responses:
+        '200':
+          description: تمت المزامنة بنجاح وبدون تعارضات
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      synced_count:
+                        type: integer
+                        example: 1
+                      conflicts:
+                        type: array
+                        example: []
+        '409':
+          description: فشل المزامنة لوجود تعارض حجز مزدوج
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: OFFLINE_SYNC_CONFLICT
+                      message:
+                        type: string
+                        example: يوجد تعارض في البيانات التي تم تعديلها أثناء عدم الاتصال
+
+  /v1/queue/call-next:
+    post:
+      summary: نداء المريض وتحديث الشاشة (Call Next Patient)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - doctor_id
+              properties:
+                doctor_id:
+                  type: string
+                  example: doctor-uuid-12345
+      responses:
+        '200':
+          description: تم النداء وتحديث الشاشة عبر WebSockets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      called_patient:
+                        type: object
+                        properties:
+                          queue_number:
+                            type: integer
+                            example: 14
+                          display_name:
+                            type: string
+                            example: محمد أ.
+                          appointment_id:
+                            type: string
+                            example: appointment-uuid-xxxxx
+                      websocket_broadcast_sent:
+                        type: boolean
+                        example: true
+
+  /v1/settings/notifications:
+    get:
+      summary: الحصول على إعدادات تفضيلات الإشعارات للعيادة (Get Notification Settings)
+      responses:
+        '200':
+          description: تفضيلات الإشعارات الحالية للعيادة
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      notification_settings:
+                        type: object
+                        properties:
+                          patient_email_booking_confirm:
+                            type: boolean
+                            example: true
+                          patient_whatsapp_booking_confirm:
+                            type: boolean
+                            example: true
+                          patient_email_prescription:
+                            type: boolean
+                            example: true
+                          patient_email_invoice:
+                            type: boolean
+                            example: true
+                          doctor_email_new_booking:
+                            type: boolean
+                            example: true
+                          doctor_whatsapp_new_booking:
+                            type: boolean
+                            example: false
+                          doctor_email_daily_report:
+                            type: boolean
+                            example: true
+                          doctor_email_weekly_report:
+                            type: boolean
+                            example: true
+    put:
+      summary: تحديث إعدادات تفضيلات الإشعارات للعيادة (Update Notification Settings)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - notification_settings
+              properties:
+                notification_settings:
+                  type: object
+      responses:
+        '200':
+          description: تم التعديل بنجاح
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                        example: تم تحديث إعدادات الإشعارات بنجاح
+                      updated_settings:
+                        type: object
+
+  # --- Webhook Routes ---
+  /webhooks/whatsapp:
+    get:
+      summary: التحقق من رابط الـ Webhook الخاص بواتساب (Meta Verification)
+      parameters:
+        - name: hub.mode
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: hub.verify_token
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: hub.challenge
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: تأكيد نجاح التحقق وإرجاع الـ challenge
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "12345678"
+
+    post:
+      summary: استقبال رسائل الواتساب من المرضى (Meta WhatsApp Webhook Receiver)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: تم الاستلام والمعالجة
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+
+  /webhooks/telegram:
+    post:
+      summary: استقبال رسائل تليجرام من المرضى (Telegram Bot Webhook Receiver)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: تم الاستلام
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true

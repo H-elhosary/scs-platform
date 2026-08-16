@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>غرفة الكشف الطبي ورسم الأسنان — Smart Clinic OS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="core/core.css">
+  <link rel="stylesheet" href="pages/patients/patients.css">
+  <!-- Three.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <style>
+    /* 3D Dental Chart Styles */
+    .dental-3d-container {
+      position: relative;
+      width: 100%;
+      height: 480px;
+      background: linear-gradient(180deg, #f0f4f8 0%, #e2e8f0 50%, #f0f4f8 100%);
+      border-radius: 0 0 0 0;
+      cursor: grab;
+      overflow: hidden;
+    }
+    .dental-3d-container:active { cursor: grabbing; }
+    .dental-3d-container canvas { display: block; width: 100% !important; height: 100% !important; }
+
+    .dental-3d-controls {
+      position: absolute;
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 8px;
+      z-index: 10;
+    }
+    .dental-3d-controls button {
+      background: rgba(255,255,255,0.92);
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      font-family: 'Cairo', sans-serif;
+      color: #334155;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s;
+      backdrop-filter: blur(8px);
+    }
+    .dental-3d-controls button:hover { background: #ffffff; border-color: #2563eb; color: #2563eb; }
+    .dental-3d-controls button.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+
+    .dental-3d-hint {
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.75);
+      color: #fff;
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: 'Cairo', sans-serif;
+      backdrop-filter: blur(6px);
+      z-index: 10;
+      pointer-events: none;
+      transition: opacity 0.4s;
+    }
+
+    /* 3D Tooth Popup */
+    .tooth-3d-popup {
+      display: none;
+      position: absolute;
+      z-index: 100;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.15), 0 2px 8px rgba(0,0,0,0.08);
+      width: 190px;
+      overflow: hidden;
+      animation: popupSlideIn 0.2s ease;
+    }
+    @keyframes popupSlideIn {
+      from { opacity: 0; transform: translateY(8px) scale(0.96); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .tooth-3d-popup-header {
+      background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+      padding: 10px 14px;
+      font-size: 13px;
+      font-weight: 800;
+      color: #0f172a;
+      border-bottom: 1px solid #e2e8f0;
+      text-align: center;
+      font-family: 'Cairo', sans-serif;
+    }
+    .tooth-3d-popup-options { display: flex; flex-direction: column; padding: 5px; gap: 1px; }
+    .t3d-opt {
+      display: flex; align-items: center; gap: 8px; padding: 7px 12px;
+      border: none; background: transparent; border-radius: 7px;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      font-family: 'Cairo', sans-serif; transition: background 0.12s;
+      text-align: right; direction: rtl;
+    }
+    .t3d-opt:hover { background: #f1f5f9; }
+    .t3d-opt.active { background: #eff6ff; font-weight: 800; }
+    .t3d-opt i { width: 16px; text-align: center; font-size: 11px; }
+    .t3d-opt.opt-healthy   { color: #047857; }
+    .t3d-opt.opt-filling   { color: #1d4ed8; }
+    .t3d-opt.opt-endo      { color: #6d28d9; }
+    .t3d-opt.opt-extracted { color: #b91c1c; }
+    .t3d-opt.opt-crown     { color: #b45309; }
+    .t3d-opt.opt-implant   { color: #0369a1; }
+  </style>
+</head>
+<body class="clinic-body">
+  <div class="clinic-layout">
+    <main class="clinic-main" id="clinic-main">
+      <div class="view-header">
+        <div>
+          <h1><i class="fa-solid fa-tooth" style="color: #2563eb;"></i> غرفة الكشف ورسم الأسنان</h1>
+          <p class="view-subtitle" id="exam-patient-info">جاري تحميل بيانات المريض والحجز...</p>
+        </div>
+        <div class="view-header-actions">
+          <button class="btn-outline" onclick="location.href='dashboard.html'">
+            <i class="fa-solid fa-arrow-right"></i> العودة للرئيسية
+          </button>
+        </div>
+      </div>
+
+      <!-- ===== 3D INTERACTIVE CHART (DENTAL OR ORTHOPEDIC) ===== -->
+      <div class="dental-chart-card">
+        <div class="card-header">
+          <h2><i class="fa-solid fa-cube" id="chart-header-icon" style="color: #2563eb;"></i> <span id="chart-card-title">مخطط الفحص التفاعلي ثلاثي الأبعاد</span></h2>
+          <span style="font-size: 12px; color: #64748b; font-weight: 600;" id="chart-header-subtitle">اسحب للتدوير · اضغط على أي جزء لتحديد حالته</span>
+        </div>
+
+        <div class="dental-3d-container" id="dental-3d-canvas">
+          <div class="dental-3d-hint" id="dental-3d-hint">
+            <i class="fa-solid fa-hand-pointer"></i>
+            <span id="dental-3d-hint-text">اسحب يمين وشمال للتدوير — اضغط على أي جزء لاختيار حالته</span>
+          </div>
+          <div class="dental-3d-controls" id="dental-3d-controls">
+            <!-- Rendered dynamically by JS -->
+          </div>
+        </div>
+
+        <!-- 3D Popup (floating, positioned via JS) -->
+        <div class="tooth-3d-popup" id="tooth-3d-popup">
+          <div class="tooth-3d-popup-header" id="tooth-3d-popup-title">تحديد الحالة</div>
+          <div class="tooth-3d-popup-options" id="tooth-3d-popup-options">
+            <!-- Rendered dynamically by JS -->
+          </div>
+        </div>
+
+        <!-- Color Legend -->
+        <div class="dental-legend" id="dental-legend">
+          <!-- Rendered dynamically by JS -->
+        </div>
+
+        <!-- Summary Box -->
+        <div class="dental-summary-box">
+          <div>
+            <strong style="font-size: 13px; color: #0f172a; display: block; margin-bottom: 4px;" id="chart-summary-title">ملخص الحالات المسجلة:</strong>
+            <div class="dental-summary-tags" id="dental-summary-tags">
+              <span style="font-size: 12px; color: #94a3b8; font-style: italic;">جميع الأجزاء سليمة. اضغط على أي جزء في الموديل لتسجيل حالته.</span>
+            </div>
+          </div>
+          <button type="button" class="btn-sm btn-outline" onclick="resetDentalChart()">
+            <i class="fa-solid fa-rotate-left"></i> إعادة ضبط
+          </button>
+        </div>
+      </div>
+
+      <!-- ===== SOAP CLINICAL NOTES ===== -->
+      <div class="soap-grid">
+        <div class="soap-card">
+          <div class="soap-header soap-s"><span>S</span> شكوى المريض (Subjective)</div>
+          <div class="soap-body">
+            <textarea id="soap-subjective" placeholder="اكتب شكوى المريض، الأعراض الحالية والتاريخ المرضي..." rows="4"></textarea>
+          </div>
+        </div>
+        <div class="soap-card">
+          <div class="soap-header soap-o"><span>O</span> العلامات الحيوية (Objective)</div>
+          <div class="soap-body">
+            <div class="vitals-grid">
+              <div class="vital-field"><label>ضغط الدم (BP)</label><input type="text" id="soap-bp" placeholder="120/80"></div>
+              <div class="vital-field"><label>النبض (Pulse)</label><input type="number" id="soap-pulse" placeholder="72"></div>
+              <div class="vital-field"><label>الحرارة (°C)</label><input type="number" step="0.1" id="soap-temp" placeholder="37.0"></div>
+              <div class="vital-field"><label>الوزن (كجم)</label><input type="number" step="0.1" id="soap-weight" placeholder="70"></div>
+            </div>
+          </div>
+        </div>
+        <div class="soap-card">
+          <div class="soap-header soap-a"><span>A</span> التشخيص الطبي (Assessment)</div>
+          <div class="soap-body">
+            <input type="text" id="soap-diagnosis" placeholder="كود ICD-11 أو اسم التشخيص..." class="soap-input" style="margin-bottom: 10px;">
+            <textarea id="soap-assessment-notes" placeholder="ملاحظات التشخيص الإضافية..." rows="2"></textarea>
+          </div>
+        </div>
+        <div class="soap-card">
+          <div class="soap-header soap-p"><span>P</span> الخطة العلاجية (Plan)</div>
+          <div class="soap-body">
+            <textarea id="soap-plan" placeholder="خطوات العلاج (مثل: حشو عصب + جلسة تلميع)..." rows="4"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== E-PRESCRIPTION TABLE ===== -->
+      <div class="clinic-card">
+        <div class="card-header">
+          <h2><i class="fa-solid fa-prescription-bottle-medical" style="color: #2563eb;"></i> الروشتة الإلكترونية (E-Prescription)</h2>
+          <button class="btn-outline-cta" onclick="addPrescriptionRow()"><i class="fa-solid fa-plus"></i> إضافة دواء</button>
+        </div>
+        <div class="table-responsive">
+          <table class="clinic-table" id="prescription-table">
+            <thead><tr>
+              <th>اسم الدواء / العلاج</th><th>الجرعة (Dosage)</th><th>المدة (Duration)</th><th>تعليمات الاستخدام</th><th style="width: 50px;"></th>
+            </tr></thead>
+            <tbody id="prescription-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button class="btn-outline" onclick="printPrescription()"><i class="fa-solid fa-print"></i> طباعة الروشتة الرسمية</button>
+        <button class="btn-primary-cta" onclick="saveConsultation()"><i class="fa-solid fa-check-double"></i> حفظ الكشف الطبي والروشتة</button>
+      </div>
+    </main>
+  </div>
+
+  <script src="core/api.js"></script>
+  <script src="core/shared.js"></script>
+  <script src="exam.js"></script>
+</body>
+</html>

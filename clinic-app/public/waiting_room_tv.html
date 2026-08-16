@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>شاشة غرفة الانتظار — Smart Clinic OS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Outfit:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- QR Code Library -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #030712;
+      color: #f8fafc;
+      font-family: 'Cairo', 'Outfit', sans-serif;
+      overflow: hidden;
+      height: 100vh;
+    }
+
+    /* ====== MAIN LAYOUT ====== */
+    .tv-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto 1fr auto;
+      height: 100vh;
+      gap: 0;
+    }
+
+    /* ====== HEADER ====== */
+    .tv-header {
+      grid-column: 1 / -1;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      border-bottom: 2px solid rgba(14,165,233,0.2);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 18px 40px;
+    }
+
+    .tv-brand {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .tv-logo {
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #0f766e 0%, #0ea5e9 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 24px;
+    }
+
+    .tv-brand h1 {
+      font-size: 24px;
+      font-weight: 900;
+      color: #f8fafc;
+    }
+
+    .tv-brand span {
+      font-size: 13px;
+      color: #64748b;
+      display: block;
+      font-weight: 600;
+    }
+
+    .tv-clock {
+      text-align: left;
+    }
+
+    .tv-clock-time {
+      font-size: 38px;
+      font-weight: 900;
+      font-family: 'Outfit', monospace;
+      color: #0ea5e9;
+      line-height: 1;
+    }
+
+    .tv-clock-date {
+      font-size: 13px;
+      color: #64748b;
+      font-weight: 600;
+    }
+
+    /* ====== CURRENT PATIENT (LEFT PANEL) ====== */
+    .tv-current {
+      background: linear-gradient(180deg, rgba(15,23,42,0.95) 0%, rgba(30,41,59,0.6) 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 30px 40px;
+      border-left: 1px solid rgba(255,255,255,0.04);
+      position: relative;
+    }
+
+    .tv-current-label {
+      font-size: 15px;
+      font-weight: 700;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 16px;
+    }
+
+    .tv-current-number {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #0f766e 0%, #0ea5e9 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 60px;
+      font-weight: 900;
+      font-family: 'Outfit', sans-serif;
+      color: white;
+      margin-bottom: 18px;
+      box-shadow: 0 0 40px rgba(14,165,233,0.3), 0 0 80px rgba(14,165,233,0.1);
+      animation: pulseGlow 3s infinite ease-in-out;
+    }
+
+    @keyframes pulseGlow {
+      0%, 100% { box-shadow: 0 0 40px rgba(14,165,233,0.3), 0 0 80px rgba(14,165,233,0.1); }
+      50% { box-shadow: 0 0 60px rgba(14,165,233,0.5), 0 0 120px rgba(14,165,233,0.2); }
+    }
+
+    .tv-current-name {
+      font-size: 32px;
+      font-weight: 800;
+      color: #f8fafc;
+      margin-bottom: 6px;
+    }
+
+    .tv-current-doctor {
+      font-size: 15px;
+      color: #0ea5e9;
+      font-weight: 600;
+    }
+
+    .tv-current-status {
+      margin-top: 16px;
+      padding: 8px 24px;
+      border-radius: 30px;
+      background: rgba(16,185,129,0.12);
+      color: #10b981;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    /* Next Patient Card */
+    .tv-next-card {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      right: 20px;
+      background: rgba(245,158,11,0.06);
+      border: 1px solid rgba(245,158,11,0.15);
+      border-radius: 14px;
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .tv-next-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .tv-next-badge {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: rgba(245,158,11,0.15);
+      color: #f59e0b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 900;
+      font-family: 'Outfit', sans-serif;
+    }
+
+    .tv-next-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: #f1f5f9;
+    }
+
+    .tv-next-label {
+      font-size: 11px;
+      color: #f59e0b;
+      font-weight: 700;
+    }
+
+    .tv-next-eta {
+      font-size: 13px;
+      font-weight: 700;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .tv-next-eta i {
+      color: #f59e0b;
+    }
+
+    /* ====== WAITING LIST (RIGHT PANEL) ====== */
+    .tv-waiting {
+      background: rgba(15, 23, 42, 0.8);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .tv-waiting-header {
+      padding: 20px 28px 14px;
+      font-size: 17px;
+      font-weight: 800;
+      color: #f1f5f9;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .tv-waiting-header i { color: #f59e0b; }
+
+    .tv-queue-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 20px;
+    }
+
+    .tv-queue-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 18px;
+      border-radius: 12px;
+      margin-bottom: 6px;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.04);
+      transition: all 0.3s ease;
+    }
+
+    .tv-queue-item:nth-child(1) {
+      border-color: rgba(245,158,11,0.2);
+      background: rgba(245,158,11,0.04);
+    }
+
+    .tv-queue-num {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.06);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 800;
+      font-family: 'Outfit', sans-serif;
+      color: #94a3b8;
+      flex-shrink: 0;
+    }
+
+    .tv-queue-item:nth-child(1) .tv-queue-num {
+      background: rgba(245,158,11,0.15);
+      color: #f59e0b;
+    }
+
+    .tv-queue-name {
+      font-size: 18px;
+      font-weight: 700;
+      color: #f1f5f9;
+    }
+
+    .tv-queue-eta {
+      font-size: 12px;
+      color: #64748b;
+      font-weight: 600;
+    }
+
+    /* QR Code Panel */
+    .tv-qr-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 20px 24px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .tv-qr-box {
+      padding: 8px;
+      background: #ffffff;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .tv-qr-text {
+      font-size: 12px;
+      color: #64748b;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .tv-qr-text i {
+      color: #25d366;
+      margin-left: 4px;
+    }
+
+    /* ====== TICKER BAR ====== */
+    .tv-ticker {
+      grid-column: 1 / -1;
+      background: linear-gradient(90deg, #0f172a 0%, #1e293b 100%);
+      border-top: 1px solid rgba(14,165,233,0.15);
+      overflow: hidden;
+      padding: 10px 0;
+      position: relative;
+      height: 44px;
+    }
+
+    .tv-ticker-track {
+      display: flex;
+      align-items: center;
+      white-space: nowrap;
+      animation: tickerScroll 50s linear infinite;
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+
+    @keyframes tickerScroll {
+      0% { transform: translateY(-50%) translateX(0%); }
+      100% { transform: translateY(-50%) translateX(-50%); }
+    }
+
+    .tv-ticker-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 36px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #94a3b8;
+    }
+
+    .tv-ticker-item i {
+      color: #0ea5e9;
+      font-size: 12px;
+    }
+
+    .tv-ticker-item .tip-icon {
+      color: #10b981;
+    }
+
+    /* Flash animation for new call */
+    .tv-flash {
+      animation: flashCall 0.5s ease 3;
+    }
+
+    @keyframes flashCall {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    .tv-empty {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      color: #334155;
+    }
+
+    .tv-empty i { font-size: 48px; margin-bottom: 16px; }
+
+    @keyframes pulseScale {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.08); opacity: 0.8; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Autoplay Enable Banner -->
+  <div id="autoplay-banner" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(3,7,18,0.98); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; font-family: Cairo, sans-serif; cursor: pointer;" onclick="enableAudioAndAnnounce()">
+    <div style="width: 100px; height: 100px; border-radius: 50%; background: rgba(14,165,233,0.1); border: 2px dashed #0ea5e9; display: flex; align-items: center; justify-content: center; color: #0ea5e9; font-size: 36px; animation: pulseScale 2s infinite;">
+      <i class="fa-solid fa-volume-high"></i>
+    </div>
+    <h2 style="font-weight: 800; color: #f8fafc; font-size: 24px;">شاشة الانتظار جاهزة للتشغيل</h2>
+    <p style="color: #64748b; font-size: 14px; text-align: center; max-width: 400px; line-height: 1.6; padding: 0 20px;">بسبب سياسات الأمان في المتصفحات، يرجى <strong>الضغط في أي مكان على الشاشة</strong> لتنشيط الرنين والنداء الصوتي التلقائي للمرضى.</p>
+    <button style="margin-top: 10px; font-family: Cairo; font-size: 14px; padding: 12px 24px; background: linear-gradient(135deg, #0f766e 0%, #0ea5e9 100%); border: none; border-radius: 30px; color: white; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(14,165,233,0.3);">ابدأ النداء الصوتي</button>
+    <div id="voice-warning-badge" style="display: none; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; padding: 10px 14px; border-radius: 8px; font-size: 12px; margin-top: 15px; text-align: center; max-width: 420px; line-height: 1.5; font-family: Cairo, sans-serif;" onclick="event.stopPropagation()">
+      <i class="fa-solid fa-triangle-exclamation"></i> <strong>تنبيه النظام:</strong> لم يتم العثور على حزمة نطق اللغة العربية في هذا المتصفح/الجهاز. سينطق المتصفح الأرقام فقط بالإنجليزية.<br>
+      <span style="font-size: 11px; opacity: 0.85; margin-top: 4px; display: block;">لحل المشكلة: يرجى تثبيت <strong>حزمة اللغة العربية (Speech Pack)</strong> من إعدادات Windows.</span>
+    </div>
+  </div>
+
+  <div class="tv-container">
+    <!-- Header -->
+    <div class="tv-header">
+      <div class="tv-brand">
+        <div class="tv-logo" id="tv-logo-icon">
+          <i class="fa-solid fa-tooth"></i>
+        </div>
+        <div>
+          <h1 id="tv-clinic-name">عيادة النور</h1>
+          <span id="tv-clinic-subtitle">طب أسنان عام</span>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 20px;">
+        <button type="button" onclick="openTickerModal()" style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #94a3b8; padding: 8px 14px; border-radius: 10px; font-size: 13px; font-family: Cairo; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s ease;">
+          <i class="fa-solid fa-bullhorn" style="color: #f59e0b;"></i> تخصيص الإعلانات
+        </button>
+        <div class="tv-clock">
+          <div class="tv-clock-time" id="tv-time">--:--</div>
+          <div class="tv-clock-date" id="tv-date">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal for Customizing Ticker Announcements -->
+    <div id="ticker-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(3,7,18,0.85); backdrop-filter: blur(8px); z-index: 10000; align-items: center; justify-content: center; font-family: Cairo, sans-serif;">
+      <div style="background: #0f172a; border: 1px solid rgba(255,255,255,0.1); border-radius: 18px; width: 540px; max-width: 90%; padding: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.5);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 12px;">
+          <h3 style="font-size: 17px; font-weight: 800; color: #f8fafc; margin: 0; display: flex; align-items: center; gap: 8px;">
+            <i class="fa-solid fa-bullhorn" style="color: #f59e0b;"></i> إدارة إعلانات ونصوص شريط الانتظار
+          </h3>
+          <button type="button" onclick="closeTickerModal()" style="background: none; border: none; color: #94a3b8; font-size: 18px; cursor: pointer;">&times;</button>
+        </div>
+
+        <p style="font-size: 12px; color: #94a3b8; margin-bottom: 16px; line-height: 1.6;">
+          أضف إعلانات العيادة المخصصة أو التنبيهات والعروض الخاصة لتظهر في الشريط المتحرك أسفل شاشة الانتظار:
+        </p>
+
+        <!-- Input new announcement -->
+        <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+          <input type="text" id="new-ticker-input" placeholder="مثال: خصم 20% على تبييض الأسنان خلال هذا الأسبوع..." style="flex: 1; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 10px 14px; color: #f8fafc; font-family: Cairo; font-size: 13px; outline: none;">
+          <button type="button" onclick="addCustomAnnouncement()" style="background: #2563eb; color: #ffffff; border: none; border-radius: 8px; padding: 0 16px; font-family: Cairo; font-weight: 700; font-size: 13px; cursor: pointer;">
+            <i class="fa-solid fa-plus"></i> إضافة
+          </button>
+        </div>
+
+        <!-- Custom announcements list -->
+        <div style="font-size: 13px; font-weight: 700; color: #cbd5e1; margin-bottom: 8px;">الإعلانات الحالية المخصصة:</div>
+        <div id="custom-ticker-list" style="max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; margin-bottom: 20px;">
+          <!-- Rendered by JS -->
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 14px;">
+          <button type="button" onclick="closeTickerModal()" style="background: rgba(255,255,255,0.08); color: #f1f5f9; border: none; border-radius: 8px; padding: 8px 18px; font-family: Cairo; font-size: 13px; font-weight: 700; cursor: pointer;">
+            إغلاق
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Current Patient In Exam -->
+    <div class="tv-current" id="tv-current-area">
+      <div class="tv-current-label">المريض الحالي في الكشف</div>
+      <div class="tv-current-number" id="tv-current-num">—</div>
+      <div class="tv-current-name" id="tv-current-name">—</div>
+      <div class="tv-current-doctor" id="tv-current-doctor">—</div>
+      <div class="tv-current-status"><i class="fa-solid fa-stethoscope"></i> جاري الكشف</div>
+
+      <!-- Next Patient Card -->
+      <div class="tv-next-card" id="tv-next-card" style="display: none;">
+        <div class="tv-next-info">
+          <div class="tv-next-badge" id="tv-next-num">—</div>
+          <div>
+            <div class="tv-next-label">المريض التالي في الدور</div>
+            <div class="tv-next-name" id="tv-next-name">—</div>
+          </div>
+        </div>
+        <div class="tv-next-eta" id="tv-next-eta">
+          <i class="fa-solid fa-hourglass-half"></i>
+          <span>~ 15 دقيقة</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Waiting Queue -->
+    <div class="tv-waiting">
+      <div class="tv-waiting-header">
+        <i class="fa-solid fa-clock"></i> قائمة الانتظار
+        <span style="margin-right:auto; font-size:13px; font-weight:600; color:#64748b;" id="tv-remaining">—</span>
+      </div>
+      <div class="tv-queue-list" id="tv-queue-list">
+        <div class="tv-empty">
+          <i class="fa-solid fa-spinner fa-spin"></i>
+          <p>جاري التحميل...</p>
+        </div>
+      </div>
+
+      <!-- QR Code Panel -->
+      <div class="tv-qr-panel">
+        <div class="tv-qr-box" id="tv-qr-canvas">
+          <!-- QR rendered here -->
+        </div>
+        <div class="tv-qr-text">
+          <i class="fa-brands fa-whatsapp"></i> امسح الكود لحجز موعد عبر واتساب
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Ticker Bar -->
+    <div class="tv-ticker">
+      <div class="tv-ticker-track" id="tv-ticker-track">
+        <!-- Rendered by JS based on specialty -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '';
+    let lastCalledAt = '';
+    let audioActivated = false;
+    let voices = [];
+    const AVG_EXAM_MINUTES = 15; // Estimated avg exam duration
+
+    // ====== MULTI-SPECIALTY DYNAMIC BRANDING ======
+    function applyClinicBranding() {
+      const specialty = localStorage.getItem('tenant_specialty') || 'dental';
+      const clinicName = localStorage.getItem('tenant_name') || 'عيادة النور لطب الأسنان';
+      const logoEl = document.getElementById('tv-logo-icon');
+      const nameEl = document.getElementById('tv-clinic-name');
+      const subEl = document.getElementById('tv-clinic-subtitle');
+
+      nameEl.textContent = clinicName;
+
+      if (specialty === 'orthopedic') {
+        logoEl.innerHTML = '<i class="fa-solid fa-bone"></i>';
+        logoEl.style.background = 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)';
+        subEl.textContent = 'جراحة وعلاج العظام والمفاصل';
+        document.querySelector('.tv-header').style.borderBottomColor = 'rgba(124, 58, 237, 0.25)';
+      } else {
+        logoEl.innerHTML = '<i class="fa-solid fa-tooth"></i>';
+        subEl.textContent = 'طب أسنان عام وتجميل';
+      }
+
+      // Render specialty-specific tips ticker
+      renderTicker(specialty);
+    }
+
+    // ====== HEALTH TIPS & ANNOUNCEMENTS TICKER ======
+    function renderTicker(specialty) {
+      const track = document.getElementById('tv-ticker-track');
+      if (!track) return;
+
+      const dentalTips = [
+        { icon: 'fa-tooth', text: 'اغسل أسنانك مرتين يومياً بمعجون يحتوي على الفلورايد لحماية المينا' },
+        { icon: 'fa-shield-heart', text: 'استخدم خيط الأسنان يومياً لإزالة البلاك من المناطق التي لا تصلها الفرشاة' },
+        { icon: 'fa-apple-whole', text: 'تناول الفواكه والخضروات الطازجة لتقوية اللثة والأسنان' },
+        { icon: 'fa-mug-hot', text: 'قلل من شرب القهوة والمشروبات الغازية لحماية مينا الأسنان' },
+        { icon: 'fa-calendar-check', text: 'قم بزيارة طبيب الأسنان كل 6 أشهر للكشف الدوري والتنظيف' },
+        { icon: 'fa-ban-smoking', text: 'التدخين يؤدي إلى تسوس الأسنان وأمراض اللثة وسرطان الفم' },
+        { icon: 'fa-face-smile', text: 'ابتسامتك هي أغلى ما تملك — حافظ عليها بالعناية اليومية' },
+        { icon: 'fa-baby', text: 'ابدأ تنظيف أسنان طفلك بمجرد ظهور أول سن لبني' }
+      ];
+
+      const orthoTips = [
+        { icon: 'fa-person-walking', text: 'المشي 30 دقيقة يومياً يقوي العظام ويحمي المفاصل من التآكل' },
+        { icon: 'fa-bone', text: 'تناول الكالسيوم وفيتامين D يومياً لتقوية كثافة العظام' },
+        { icon: 'fa-dumbbell', text: 'مارس تمارين تقوية العضلات لحماية المفاصل من الإصابات' },
+        { icon: 'fa-chair', text: 'حافظ على وضعية جلوس صحيحة لحماية العمود الفقري والظهر' },
+        { icon: 'fa-weight-scale', text: 'الحفاظ على الوزن المثالي يقلل الضغط على مفاصل الركبة والظهر' },
+        { icon: 'fa-bed', text: 'استخدم وسادة ومرتبة طبية لتقليل آلام الرقبة والظهر' },
+        { icon: 'fa-ice-cream', text: 'استخدم الثلج على المفاصل المتورمة لتخفيف الالتهاب' },
+        { icon: 'fa-stairs', text: 'تجنب صعود السلالم بشكل مفرط لحماية غضاريف الركبة' }
+      ];
+
+      let tips = specialty === 'orthopedic' ? orthoTips : dentalTips;
+
+      // Check if clinic has custom announcements/tips saved
+      try {
+        const customTipsJson = localStorage.getItem('clinic_tv_custom_tips');
+        if (customTipsJson) {
+          const customTips = JSON.parse(customTipsJson);
+          if (Array.isArray(customTips) && customTips.length > 0) {
+            tips = [...customTips, ...tips];
+          }
+        }
+      } catch (e) {
+        console.error('Error loading custom tips:', e);
+      }
+
+      // Duplicate tips for seamless infinite scroll
+      const allTips = [...tips, ...tips];
+
+      track.innerHTML = allTips.map(t => `
+        <span class="tv-ticker-item">
+          <i class="fa-solid ${t.icon || 'fa-circle-info'} tip-icon"></i>
+          ${t.text}
+        </span>
+      `).join('');
+    }
+
+    // ====== CUSTOM ANNOUNCEMENTS MANAGEMENT ======
+    function openTickerModal() {
+      document.getElementById('ticker-modal').style.display = 'flex';
+      renderCustomTickerList();
+    }
+
+    function closeTickerModal() {
+      document.getElementById('ticker-modal').style.display = 'none';
+      const specialty = localStorage.getItem('tenant_specialty') || 'dental';
+      renderTicker(specialty);
+    }
+
+    function getCustomAnnouncements() {
+      try {
+        const raw = localStorage.getItem('clinic_tv_custom_tips');
+        return raw ? JSON.parse(raw) : [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveCustomAnnouncements(arr) {
+      localStorage.setItem('clinic_tv_custom_tips', JSON.stringify(arr));
+      renderCustomTickerList();
+      const specialty = localStorage.getItem('tenant_specialty') || 'dental';
+      renderTicker(specialty);
+    }
+
+    function renderCustomTickerList() {
+      const listEl = document.getElementById('custom-ticker-list');
+      if (!listEl) return;
+
+      const items = getCustomAnnouncements();
+      if (items.length === 0) {
+        listEl.innerHTML = '<div style="color: #64748b; font-size: 12px; padding: 8px 0;">لا توجد إعلانات مخصصة مضافة حالياً. الشريط يعرض النصائح الطبية الافتراضية.</div>';
+        return;
+      }
+
+      listEl.innerHTML = items.map((item, idx) => `
+        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); padding: 8px 12px; border-radius: 8px;">
+          <span style="font-size: 12px; color: #f1f5f9; flex: 1; margin-left: 8px;">📢 ${item.text}</span>
+          <button type="button" onclick="deleteCustomAnnouncement(${idx})" style="background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); color: #ef4444; border-radius: 6px; padding: 3px 8px; font-size: 11px; cursor: pointer;">
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        </div>
+      `).join('');
+    }
+
+    function addCustomAnnouncement() {
+      const input = document.getElementById('new-ticker-input');
+      const text = (input?.value || '').trim();
+      if (!text) return;
+
+      const items = getCustomAnnouncements();
+      items.push({ icon: 'fa-bullhorn', text: text });
+      saveCustomAnnouncements(items);
+      input.value = '';
+    }
+
+    function deleteCustomAnnouncement(idx) {
+      const items = getCustomAnnouncements();
+      items.splice(idx, 1);
+      saveCustomAnnouncements(items);
+    }
+
+    // ====== DYNAMIC QR CODE (BASED ON CLINIC PHONE) ======
+    function renderQRCode() {
+      const container = document.getElementById('tv-qr-canvas');
+      const textEl = document.querySelector('.tv-qr-text');
+      if (!container) return;
+
+      const specialty = localStorage.getItem('tenant_specialty') || 'dental';
+      const clinicName = localStorage.getItem('tenant_name') || (specialty === 'orthopedic' ? 'عيادة الشفاء لجراحة العظام' : 'عيادة النور لطب الأسنان');
+      
+      // Get clinic phone number dynamically
+      let clinicPhone = localStorage.getItem('tenant_phone');
+      if (!clinicPhone) {
+        clinicPhone = specialty === 'orthopedic' ? '+201099887766' : '+201012345678';
+      }
+
+      // Format for WhatsApp international link (remove non-digits)
+      const cleanPhone = clinicPhone.replace(/[^0-9]/g, '');
+      const msg = encodeURIComponent(`مرحباً ${clinicName}، أود الاستفسار وحجز موعد كشف.`);
+      const bookingUrl = `https://wa.me/${cleanPhone}?text=${msg}`;
+
+      // Update text label with clinic phone
+      if (textEl) {
+        textEl.innerHTML = `<i class="fa-brands fa-whatsapp"></i> واتساب: <strong style="color:#25d366; direction:ltr; display:inline-block;">${clinicPhone}</strong>`;
+      }
+
+      if (typeof QRCode !== 'undefined' && QRCode.toCanvas) {
+        const canvas = document.createElement('canvas');
+        QRCode.toCanvas(canvas, bookingUrl, {
+          width: 90,
+          margin: 1,
+          color: { dark: '#0f172a', light: '#ffffff' }
+        }, function(error) {
+          if (error) {
+            console.error('QR generation failed:', error);
+            container.innerHTML = '<div style="width:90px;height:90px;background:#1e293b;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#475569;font-size:11px;text-align:center;">QR<br>غير متاح</div>';
+          } else {
+            container.innerHTML = '';
+            canvas.style.borderRadius = '6px';
+            container.appendChild(canvas);
+          }
+        });
+      } else {
+        container.innerHTML = `
+          <div style="width:90px;height:90px;background:#f8fafc;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;">
+            <i class="fa-solid fa-qrcode" style="color:#0f172a;font-size:40px;"></i>
+            <span style="font-size:8px;color:#64748b;font-weight:700;">احجز الآن</span>
+          </div>
+        `;
+      }
+    }
+
+    // ====== VOICES / TTS ======
+    function loadVoices() {
+      if ('speechSynthesis' in window) {
+        voices = window.speechSynthesis.getVoices();
+        const arVoice = getArabicVoice();
+        const warningBadge = document.getElementById('voice-warning-badge');
+        if (warningBadge) {
+          warningBadge.style.display = arVoice ? 'none' : 'block';
+        }
+      }
+    }
+    loadVoices();
+    if ('speechSynthesis' in window && window.speechSynthesis.onvoiceschanged !== undefined) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+
+    function getArabicVoice() {
+      let arVoice = voices.find(v => v.lang.startsWith('ar-') || v.lang.toLowerCase() === 'ar');
+      if (!arVoice) {
+        arVoice = voices.find(v => v.name.toLowerCase().includes('arabic') || v.name.includes('العربية'));
+      }
+      return arVoice;
+    }
+
+    // Web Audio programmatic chime generator (Ding-Dong sound)
+    function playChimeSound() {
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        // Ding (D5)
+        const osc1 = audioCtx.createOscillator();
+        const gain1 = audioCtx.createGain();
+        osc1.connect(gain1);
+        gain1.connect(audioCtx.destination);
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(587.33, audioCtx.currentTime);
+        gain1.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain1.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.8);
+        osc1.start(audioCtx.currentTime);
+        osc1.stop(audioCtx.currentTime + 0.8);
+
+        // Dong (A4)
+        const osc2 = audioCtx.createOscillator();
+        const gain2 = audioCtx.createGain();
+        osc2.connect(gain2);
+        gain2.connect(audioCtx.destination);
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(440.00, audioCtx.currentTime + 0.22);
+        gain2.gain.setValueAtTime(0, audioCtx.currentTime);
+        gain2.gain.setValueAtTime(0.2, audioCtx.currentTime + 0.22);
+        gain2.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1.22);
+        osc2.start(audioCtx.currentTime + 0.22);
+        osc2.stop(audioCtx.currentTime + 1.22);
+      } catch (e) {
+        console.error('AudioContext chime failed:', e);
+      }
+    }
+
+    // Speech Synthesis function with cloud voice fallback
+    function speakText(phrase) {
+      const arVoice = getArabicVoice();
+      if (arVoice) {
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(phrase);
+          utterance.lang = 'ar-EG';
+          utterance.rate = 0.8;
+          utterance.voice = arVoice;
+          window.speechSynthesis.speak(utterance);
+        }
+      } else {
+        // Fallback to StreamElements public TTS
+        let fallbackAudio = document.getElementById('tts-fallback-audio');
+        if (!fallbackAudio) {
+          fallbackAudio = document.createElement('audio');
+          fallbackAudio.id = 'tts-fallback-audio';
+          document.body.appendChild(fallbackAudio);
+        }
+        const url = `https://api.streamelements.com/kappa/v2/speech?voice=Maged&text=${encodeURIComponent(phrase)}`;
+        fallbackAudio.src = url;
+        fallbackAudio.play().catch(err => {
+          if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(phrase);
+            utterance.lang = 'ar-EG';
+            utterance.rate = 0.8;
+            window.speechSynthesis.speak(utterance);
+          }
+        });
+      }
+    }
+
+    function enableAudioAndAnnounce() {
+      audioActivated = true;
+      document.getElementById('autoplay-banner').style.display = 'none';
+      playChimeSound();
+      speakText("تم تفعيل الصوت والنداء الآلي بنجاح");
+    }
+
+    // ====== CLOCK ======
+    function updateClock() {
+      const now = new Date();
+      let hours = now.getHours();
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const seconds = String(now.getSeconds()).padStart(2, '0');
+      const ampm = hours >= 12 ? 'م' : 'ص';
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+      const hoursStr = String(hours).padStart(2, '0');
+
+      document.getElementById('tv-time').textContent = `${hoursStr}:${minutes}:${seconds} ${ampm}`;
+
+      const dayNames = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+      const monthNames = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+      document.getElementById('tv-date').textContent = `${dayNames[now.getDay()]} ${now.getDate()} ${monthNames[now.getMonth()]} ${now.getFullYear()}`;
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // ====== LOAD QUEUE ======
+    async function loadQueue() {
+      try {
+        const tenantId = localStorage.getItem('tenant_id') || '';
+        const headers = {};
+        if (tenantId) headers['x-tenant-id'] = tenantId;
+
+        const res = await fetch(`${API_BASE}/v1/queue/today`, { headers }).then(r => r.json());
+        if (res.success) {
+          const data = res.data;
+
+          // Current patient
+          if (data.current_in_exam && data.current_in_exam.patient_name) {
+            document.getElementById('tv-current-num').textContent = data.current_in_exam.queue_number;
+            document.getElementById('tv-current-name').textContent = data.current_in_exam.patient_name;
+            document.getElementById('tv-current-doctor').textContent = data.current_in_exam.doctor_name || 'الطبيب المعالج';
+            document.querySelector('.tv-current-status').style.display = 'inline-block';
+
+            // Flash if new call
+            if (data.last_called_at && data.last_called_at !== lastCalledAt) {
+              const isFirstRun = (lastCalledAt === '');
+              lastCalledAt = data.last_called_at;
+
+              const currentArea = document.getElementById('tv-current-area');
+              currentArea.classList.add('tv-flash');
+              setTimeout(() => currentArea.classList.remove('tv-flash'), 2000);
+
+              if (audioActivated && !isFirstRun) {
+                playChimeSound();
+                speakText(`مريض رقم ${data.current_in_exam.queue_number}، أستاذ ${data.current_in_exam.patient_name}، يرجى التوجه لغرفة الكشف.`);
+              }
+            }
+          } else {
+            document.getElementById('tv-current-num').textContent = '—';
+            document.getElementById('tv-current-name').textContent = 'لا يوجد مريض حالياً';
+            document.getElementById('tv-current-doctor').textContent = 'غرفة الكشف شاغرة';
+            document.querySelector('.tv-current-status').style.display = 'none';
+          }
+
+          // Next patient card
+          const nextCard = document.getElementById('tv-next-card');
+          if (data.waiting_list && data.waiting_list.length > 0) {
+            const nextPatient = data.waiting_list[0];
+            nextCard.style.display = 'flex';
+            document.getElementById('tv-next-num').textContent = nextPatient.queue_number;
+            document.getElementById('tv-next-name').textContent = nextPatient.patient_name;
+
+            // Estimated wait time (remaining position × avg exam minutes)
+            const etaMinutes = AVG_EXAM_MINUTES;
+            document.getElementById('tv-next-eta').innerHTML = `
+              <i class="fa-solid fa-hourglass-half"></i>
+              <span>~ ${etaMinutes} دقيقة</span>
+            `;
+          } else {
+            nextCard.style.display = 'none';
+          }
+
+          // Waiting list
+          const listEl = document.getElementById('tv-queue-list');
+          if (data.waiting_list.length === 0) {
+            listEl.innerHTML = '<div class="tv-empty"><i class="fa-solid fa-check-circle" style="color:#10b981;"></i><p>لا يوجد مرضى في الانتظار</p></div>';
+          } else {
+            listEl.innerHTML = data.waiting_list.map((item, idx) => {
+              const etaMin = (idx + 1) * AVG_EXAM_MINUTES;
+              return `
+              <div class="tv-queue-item" ${item.is_urgent ? 'style="border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.06);"' : ''}>
+                <div class="tv-queue-num" ${item.is_urgent ? 'style="background: rgba(239,68,68,0.15); color: #ef4444;"' : ''}>${item.queue_number}</div>
+                <div style="display: flex; flex-direction: column; gap: 2px; flex: 1;">
+                  <div class="tv-queue-name">${item.patient_name}</div>
+                  ${item.is_urgent ? '<div style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #ef4444; font-weight: 700;"><i class="fa-solid fa-bolt"></i> حالة عاجلة</div>' : ''}
+                </div>
+                <div class="tv-queue-eta"><i class="fa-solid fa-clock" style="color: #334155; font-size: 11px;"></i> ~ ${etaMin} د</div>
+              </div>
+            `}).join('');
+          }
+
+          document.getElementById('tv-remaining').textContent = `${data.waiting_list.length} مريض`;
+        }
+      } catch (e) {
+        console.error('Queue load error:', e);
+      }
+    }
+
+    // ====== INIT ======
+    applyClinicBranding();
+    renderQRCode();
+    loadQueue();
+    setInterval(loadQueue, 5000);
+  </script>
+</body>
+</html>

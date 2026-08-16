@@ -1,0 +1,183 @@
+/* =============================================
+   PATIENTS & EXAM — Smart Clinic OS
+   SOAP Notes, Vitals, Patient Profile
+   ============================================= */
+
+/* === SOAP Grid === */
+.soap-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.soap-card {
+  background: var(--scs-bg-surface);
+  border: 1px solid var(--scs-border-subtle);
+  border-radius: var(--scs-radius-xl);
+  overflow: hidden;
+}
+
+.soap-header {
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--scs-border-subtle);
+}
+
+.soap-header span:first-child {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--scs-radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 14px;
+  font-family: var(--scs-font-en);
+}
+
+.soap-header.soap-s { color: var(--scs-primary-light); }
+.soap-header.soap-s span:first-child { background: var(--scs-primary-glow); color: var(--scs-primary); }
+.soap-header.soap-o { color: var(--scs-warning); }
+.soap-header.soap-o span:first-child { background: rgba(245,158,11,0.15); color: var(--scs-warning); }
+.soap-header.soap-a { color: var(--scs-danger); }
+.soap-header.soap-a span:first-child { background: rgba(239,68,68,0.15); color: var(--scs-danger); }
+.soap-header.soap-p { color: var(--scs-success); }
+.soap-header.soap-p span:first-child { background: rgba(16,185,129,0.15); color: var(--scs-success); }
+
+.soap-body {
+  padding: 16px;
+}
+
+.soap-body textarea, .soap-input {
+  width: 100%;
+  background: var(--scs-bg-input);
+  border: 1px solid var(--scs-border-input);
+  border-radius: var(--scs-radius-md);
+  color: var(--scs-text);
+  padding: 12px;
+  font-family: var(--scs-font-ar);
+  font-size: 13px;
+  resize: vertical;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.soap-body textarea:focus, .soap-input:focus {
+  border-color: rgba(14,165,233,0.3);
+  box-shadow: 0 0 0 3px rgba(14,165,233,0.08);
+}
+
+.vitals-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.vital-field label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--scs-text-muted);
+  margin-bottom: 4px;
+  display: block;
+}
+
+.vital-field input {
+  width: 100%;
+  background: var(--scs-bg-input);
+  border: 1px solid var(--scs-border-input);
+  border-radius: var(--scs-radius-md);
+  color: var(--scs-text);
+  padding: 10px 12px;
+  font-family: var(--scs-font-en);
+  font-size: 14px;
+  font-weight: 600;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.vital-field input:focus {
+  border-color: rgba(245,158,11,0.3);
+}
+
+.soap-actions {
+  padding: 16px 20px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* === Patient Profile Details === */
+.profile-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.profile-info-item {
+  padding: 10px;
+  background: rgba(255,255,255,0.03);
+  border-radius: var(--scs-radius-md);
+  border: 1px solid rgba(255,255,255,0.05);
+}
+
+.profile-info-item label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--scs-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.profile-info-item span {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--scs-text-heading);
+}
+
+.profile-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--scs-text-heading);
+  margin: 20px 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--scs-border-subtle);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-section-title i { color: var(--scs-primary); font-size: 13px; }
+
+.visit-timeline-item {
+  padding: 12px;
+  background: var(--scs-bg-subtle);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: var(--scs-radius-lg);
+  margin-bottom: 8px;
+  border-right: 3px solid var(--scs-primary);
+}
+
+.visit-timeline-date {
+  font-size: 11px;
+  color: var(--scs-text-muted);
+  font-weight: 600;
+}
+
+.visit-timeline-service {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--scs-text-heading);
+}
+
+.visit-timeline-amount {
+  font-size: 12px;
+  color: var(--scs-warning);
+  font-weight: 700;
+  font-family: var(--scs-font-en);
+}

@@ -1,0 +1,18 @@
+uid=1_0 RootWebArea "Smart Clinic OS - تسجيل دخول العيادة" url="http://localhost:3001/index.html"
+  uid=1_1 banner
+    uid=1_2 button "Toggle Language"
+  uid=1_3 main
+    uid=1_4 image "Futuristic Smart Clinic" url="http://localhost:3001/assets/login_illustration.png"
+    uid=1_5 StaticText "Smart Clinic OS"
+    uid=1_6 heading "Integrated Digital Medical Infrastructure" level="1"
+    uid=1_7 StaticText "Complete clinic control, instant calendar scheduling, automatic AI triage, and offline data synchronization."
+    uid=1_8 heading "Smart Clinic OS" level="2"
+    uid=1_9 StaticText "Smart Clinic Portal"
+    uid=1_10 heading "Medical Staff Login" level="3"
+    uid=1_11 StaticText "Enter your registered email and password for your clinic"
+    uid=1_12 form
+      uid=1_13 StaticText "Email Address"
+      uid=1_14 textbox "Email Address" required value="ortho@shefaa.com"
+      uid=1_15 StaticText "Password"
+      uid=1_16 textbox "Password" focusable focused required value="••••••••"
+      uid=1_17 button "Sign In"

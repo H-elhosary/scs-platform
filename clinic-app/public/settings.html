@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>لوحة تحكم العيادة — الإعدادات</title>
+  <!-- Google Fonts: Cairo & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Core Design System -->
+  <link rel="stylesheet" href="core/core.css">
+  <!-- Page Specific Stylesheet -->
+  <link rel="stylesheet" href="pages/settings/settings.css">
+</head>
+<body class="clinic-body">
+  <div class="clinic-layout">
+    <!-- Sidebar is dynamically injected here by shared.js -->
+    <main class="clinic-main" id="clinic-main">
+      <div class="view-header">
+        <div>
+          <h1><i class="fa-solid fa-gear"></i> إعدادات العيادة</h1>
+          <p class="view-subtitle">تعديل الخدمات والأسعار، ساعات العمل، الإشعارات، والسياسات العامة للعيادة.</p>
+        </div>
+      </div>
+
+      <div class="settings-layout-grid">
+        <!-- Right Column: Settings Tabs Navigation -->
+        <nav class="settings-tabs" aria-label="Settings tabs">
+          <button class="settings-tab-btn active" onclick="switchSettingsTab('tab-hours')">
+            <i class="fa-solid fa-clock"></i>
+            <span>ساعات العمل</span>
+          </button>
+          <button class="settings-tab-btn" onclick="switchSettingsTab('tab-services')">
+            <i class="fa-solid fa-hand-holding-medical"></i>
+            <span>الخدمات والأسعار</span>
+          </button>
+          <button class="settings-tab-btn" onclick="switchSettingsTab('tab-doctors')">
+            <i class="fa-solid fa-user-doctor"></i>
+            <span>الأطباء والفروع</span>
+          </button>
+          <button class="settings-tab-btn" onclick="switchSettingsTab('tab-policies')">
+            <i class="fa-solid fa-list-check"></i>
+            <span>سياسات التشغيل</span>
+          </button>
+          <button class="settings-tab-btn" onclick="switchSettingsTab('tab-bot')">
+            <i class="fa-solid fa-robot"></i>
+            <span>مساعد الحجز الآلي</span>
+          </button>
+          <button class="settings-tab-btn" onclick="switchSettingsTab('tab-alerts')">
+            <i class="fa-solid fa-bell"></i>
+            <span>التنبيهات والروشتة</span>
+          </button>
+          <button class="settings-tab-btn" onclick="switchSettingsTab('tab-insurance')">
+            <i class="fa-solid fa-shield-halved"></i>
+            <span>التأمين والاسترداد</span>
+          </button>
+        </nav>
+
+        <!-- Left Column: Active Tab Panels -->
+        <div class="settings-content-area">
+          
+          <!-- Tab 1: Working Hours -->
+          <div class="settings-tab-panel active" id="tab-hours">
+            <div class="clinic-card" id="working-hours-card">
+              <div class="card-header">
+                <h2><i class="fa-solid fa-clock"></i> ساعات العمل والشيفتات</h2>
+                <div class="card-header-actions">
+                  <button class="btn-sm btn-outline" id="btn-edit-working-hours" onclick="toggleEditWorkingHours()"><i class="fa-solid fa-pen-to-square"></i> تعديل المواعيد</button>
+                </div>
+              </div>
+              <div class="card-body">
+                <div class="settings-doctor-selector" id="wh-doctor-selector-wrap" style="display: none;">
+                  <label><i class="fa-solid fa-user-doctor"></i>عرض وتعديل المواعيد للطبيب:</label>
+                  <select id="wh-doctor-select">
+                    <!-- Dynamically populated -->
+                  </select>
+                </div>
+                <div class="settings-info-bar">
+                  <i class="fa-solid fa-circle-info"></i>
+                  <span><strong>توضيح:</strong> أدخل فقط شيفت العمل (وقت بداية ونهاية تواجد الطبيب بالعيادة، مثل 9ص إلى 2ظ). يقوم النظام تلقائياً بتقسيم هذا الوقت إلى فترات حجز فردية بناءً على مدة الخدمة.</span>
+                </div>
+                <div class="working-hours-grid" id="working-hours-grid">
+                  <!-- Rendered by JS -->
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 2: Services & Prices -->
+          <div class="settings-tab-panel" id="tab-services">
+            <div class="clinic-card">
+              <div class="card-header">
+                <h2><i class="fa-solid fa-hand-holding-medical"></i> الخدمات والأسعار المتاحة</h2>
+                <div class="card-header-actions">
+                  <button class="btn-sm btn-outline" onclick="showAddServiceModal()"><i class="fa-solid fa-plus"></i> خدمة جديدة</button>
+                </div>
+              </div>
+              <div class="card-body">
+                <div class="table-responsive">
+                  <table class="clinic-table" id="services-table">
+                    <thead><tr><th>الخدمة</th><th>السعر (ج.م)</th><th>المدة (دقيقة)</th><th>الفئة</th><th>العمليات</th></tr></thead>
+                    <tbody id="services-body"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 3: Doctors & Branches -->
+          <div class="settings-tab-panel" id="tab-doctors">
+            <!-- Doctors list -->
+            <div class="clinic-card card--relative" id="doctors-card">
+              <div class="card-header">
+                <h2><i class="fa-solid fa-user-doctor"></i> أطباء العيادة والعيادات الفرعية</h2>
+                <div class="card-header-actions">
+                  <button class="btn-sm btn-outline" id="btn-add-doctor-setting" onclick="showAddDoctorModal()"><i class="fa-solid fa-plus"></i> طبيب جديد</button>
+                </div>
+              </div>
+              <div class="card-body card-body-collapse--relative">
+                <div class="table-responsive">
+                  <table class="clinic-table" id="doctors-list-table">
+                    <thead>
+                      <tr>
+                        <th>الطبيب</th>
+                        <th>التخصص</th>
+                        <th>تاريخ التسجيل</th>
+                      </tr>
+                    </thead>
+                    <tbody id="doctors-list-body">
+                      <tr><td colspan="3" class="loading-cell"><i class="fa-solid fa-spinner fa-spin"></i> جاري التحميل...</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <!-- Premium Locked Overlay -->
+                <div id="multi-doctor-locked-overlay" class="premium-locked-overlay">
+                  <i class="fa-solid fa-lock"></i>
+                  <h3>صلاحية الأطباء المتعددين غير مفعلة لباقة اشتراكك</h3>
+                  <p>قم بترقية باقة الاشتراك الحالية من لوحة التحكم لتتمكن من إضافة أطباء فرعيين وجدولة مواعيدهم.</p>
+                  <button class="btn-upgrade" onclick="showToast('يرجى التواصل مع مدير النظام لطلب الترقية للباقة الاحترافية أو باقة المؤسسات.', 'info')">طلب ترقية الباقة</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Clinic Branches -->
+            <div class="clinic-card" id="branches-card">
+              <div class="card-header">
+                <h2><i class="fa-solid fa-location-dot"></i> فروع وعناوين العيادة</h2>
+              </div>
+              <div class="card-body card-body-padded">
+                <div class="settings-form-stack">
+                  <form id="add-branch-form" onsubmit="addBranch(event)" class="form-inline-row" onclick="event.stopPropagation()">
+                    <input type="text" id="branch-new-name" placeholder="اسم الفرع الجديد (مثال: فرع المعادي)" required class="form-inline-input">
+                    <input type="text" id="branch-new-address" placeholder="العنوان / اللوكيشن بالتفصيل (أو رابط خريطة Google Maps)" required class="form-inline-input form-inline-input--wide">
+                    <button type="submit" class="btn-sm btn-outline"><i class="fa-solid fa-plus"></i> إضافة الفرع</button>
+                  </form>
+                  <div class="table-responsive table-scroll">
+                    <table class="clinic-table table-compact" id="branches-table">
+                      <thead>
+                        <tr>
+                          <th>اسم الفرع</th>
+                          <th>العنوان / اللوكيشن</th>
+                          <th>العمليات</th>
+                        </tr>
+                      </thead>
+                      <tbody id="branches-list-body">
+                        <tr><td colspan="3" class="loading-cell">جاري التحميل...</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 4: Operational Policies -->
+          <div class="settings-tab-panel" id="tab-policies">
+            <div class="clinic-card">
+              <div class="card-header">
+                <h2><i class="fa-solid fa-list-check"></i> قواعد التشغيل وسياسات الحجز</h2>
+                <div class="card-header-actions">
+                  <button class="btn-sm btn-outline" onclick="saveOperationalSettings()"><i class="fa-solid fa-save"></i> حفظ السياسات</button>
+                </div>
+              </div>
+              <div class="card-body card-body-padded">
+                <div class="settings-form-stack">
+                  <div class="form-group form-group--flush">
+                    <label>مهلة إلغاء الحجز من المريض (بالساعات)</label>
+                    <input type="number" id="op-cancel-window" min="1" max="72" value="6">
+                    <span>الحد الأدنى للوقت المسموح للمريض قبل الموعد لإلغاء حجزه واسترداد القيمة.</span>
+                  </div>
+                  <div class="form-group form-group--flush">
+                    <label>مهلة تأكيد الدفع الإلكتروني المؤقت (بالدقائق)</label>
+                    <input type="number" id="op-payment-timeout" min="5" max="60" value="15">
+                    <span>الوقت الممنوح للمريض لإكمال السداد قبل أن يقوم البوت بإلغاء الحجز المؤقت.</span>
+                  </div>
+                  <div class="form-group form-group--flush">
+                    <label>مدة الاستشارة/المتابعة المجانية المتاحة للمريض (بالأيام)</label>
+                    <input type="number" id="op-followup-duration" min="1" max="30" value="14">
+                    <span>المهلة الزمنية بعد الكشف الأساسي التي تتيح للمريض حجز زيارة متابعة مجاناً.</span>
+                  </div>
+                  <label class="toggle-switch-wrapper">
+                    <div class="toggle-text">
+                      <span class="toggle-title">السماح بحجز المتابعات المجانية عبر البوت</span>
+                      <span class="toggle-desc">إذا تم التفعيل، يتحقق البوت تلقائياً من أحقية المريض للمتابعة ويحجزها له.</span>
+                    </div>
+                    <input type="checkbox" id="op-allow-bot-followup" class="custom-switch-checkbox">
+                  </label>
+                  <label class="toggle-switch-wrapper">
+                    <div class="toggle-text">
+                      <span class="toggle-title">السماح بتسجيل الحالات العاجلة وذات الأولوية</span>
+                      <span class="toggle-desc">إذا تم التفعيل، يمكن للسكرتارية تحديد خيار "حالة عاجلة ذات أولوية" للمريض عند تسجيل الحضور ليظهر أولاً في قائمة التلفاز.</span>
+                    </div>
+                    <input type="checkbox" id="op-allow-priority-checkin" class="custom-switch-checkbox">
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 5: AI Booking Bot -->
+          <div class="settings-tab-panel" id="tab-bot">
+            <div class="clinic-card" id="channel-settings-card">
+              <div class="card-header">
+                <h2><i class="fa-solid fa-robot"></i> إعدادات مساعد الحجز الآلي (بصمة الذكاء الاصطناعي)</h2>
+                <div class="card-header-actions">
+                  <button class="btn-sm btn-outline" onclick="saveDoctorChannelSettings()"><i class="fa-solid fa-save"></i> حفظ الإعدادات</button>
+                </div>
+              </div>
+              <div class="card-body card-body-padded">
+                <div class="settings-form-stack">
+                  <!-- Explanation info -->
+                  <p class="settings-desc">
+                    قم بتفعيل أو تعطيل مساعد الحجز الذكي (الروبوت) عبر قنوات التواصل المفعلة لعيادتك من قبل الإدارة، وتخصيص الرسالة الترحيبية التي يستقبل بها المرضى.
+                  </p>
+
+                  <!-- WhatsApp Channel -->
+                  <label class="toggle-switch-wrapper">
+                    <div class="toggle-text">
+                      <span class="toggle-title"><i class="fa-brands fa-whatsapp"></i> قناة واتساب (WhatsApp)</span>
+                      <span class="toggle-desc" id="ch-wa-connected-phone">حالة الاتصال: جاري التحقق...</span>
+                    </div>
+                    <input type="checkbox" id="ch-wa-doctor-enabled" class="custom-switch-checkbox">
+                  </label>
+
+                  <!-- Telegram Channel -->
+                  <label class="toggle-switch-wrapper">
+                    <div class="toggle-text">
+                      <span class="toggle-title"><i class="fa-brands fa-telegram"></i> قناة تيليجرام (Telegram)</span>
+                      <span class="toggle-desc" id="ch-tg-connected-bot">حالة الاتصال: جاري التحقق...</span>
+                    </div>
+                    <input type="checkbox" id="ch-tg-doctor-enabled" class="custom-switch-checkbox">
+                  </label>
+
+                  <!-- Bot Greeting Message -->
+                  <div class="form-group form-group--flush">
+                    <label><i class="fa-solid fa-message"></i> رسالة الترحيب من المساعد الآلي</label>
+                    <textarea id="ch-bot-greeting" rows="4" placeholder="أهلاً بك! أنا المساعد الآلي لعيادة النور. كيف يمكنني مساعدتك في حجز موعدك اليوم؟"></textarea>
+                    <span>هذه الرسالة يرسلها البوت تلقائياً عند أول تواصل للمريض عبر أي قناة مفعلة.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 6: Notifications & Prescription -->
+          <div class="settings-tab-panel" id="tab-alerts">
+            <!-- Notifications preferences -->
+            <div class="clinic-card">
+              <div class="card-header">
+                <h2><i class="fa-solid fa-bell"></i> إدارة تفضيلات الإشعارات والتنبيهات</h2>
+                <div class="card-header-actions">
+                  <button class="btn-sm btn-outline" onclick="saveNotificationSettings()"><i class="fa-solid fa-save"></i> حفظ الإشعارات</button>
+                </div>
+              </div>
+              <div class="card-body">
+                <div class="settings-form-stack-sm">
+                  <h3 class="settings-section-title"><i class="fa-solid fa-user-injured"></i> إشعارات المرضى</h3>
+
+                  <label class="toggle-switch-wrapper">
+                    <div class="toggle-text">
+                      <span class="toggle-title">تأكيد الحجز بالبريد الإلكتروني</span>
+                      <span class="toggle-desc">إرسال رسالة بريدية فورية للمريض عند إتمام الحجز.</span>
+                    </div>
+                    <input type="checkbox" id="notif-patient-email-confirm" class="custom-switch-checkbox">
+                  </label>
+
+                  <label class="toggle-switch-wrapper">
+                    <div class="toggle-text">
+                      <span class="toggle-title">تأكيد الحجز بالواتساب (WhatsApp)</span>
+                      <span class="toggle-desc">إرسال رسالة واتساب آلية للمريض لتأكيد موعده.</span>
+                    </div>
+                    <input type="checkbox" id="notif-patient-wa-confirm" class="custom-switch-checkbox">
+                  </label>
+
+                  <label class="toggle-switch-wrapper">
+                    <div class="toggle-text">
+                      <span class="toggle-title">إرسال الروشتة بالبريد الإلكتروني</span>
+                      <span class="toggle-desc">إرسال ملف الروشتة PDF المشفر إلى البريد الإلكتروني للمريض فور الحفظ.</span>
+                    </div>
+                    <input type="checkbox" id="notif-patient-email-rx" class="custom-switch-checkbox">
+                  </label>
+
+                  <label class="toggle-switch-wrapper">
+                    <div class="toggle-text">
+                      <span class="toggle-title">إرسال الفواتير والإيصالات بالبريد</span>
+                      <span class="toggle-desc">إرسال إيصال السداد والفاتورة المالية بعد التحصيل.</span>
+                    </div>
+                    <input type="checkbox" id="notif-patient-email-invoice" class="custom-switch-checkbox">
+                  </label>
+
+                  <h3 class="settings-section-title"><i class="fa-solid fa-user-doctor"></i> تنبيهات الطبيب والسكرتارية</h3>
+
+                  <label class="toggle-switch-wrapper">
+                    <div class="toggle-text">
+                      <span class="toggle-title">تنبيه حجز جديد بالبريد الإلكتروني</span>
+                      <span class="toggle-desc">إعلام الطبيب فوراً بالبريد الإلكتروني عند حدوث حجز أو تعديل موعد.</span>
+                    </div>
+                    <input type="checkbox" id="notif-doc-email-new" class="custom-switch-checkbox">
+                  </label>
+
+                  <label class="toggle-switch-wrapper">
+                    <div class="toggle-text">
+                      <span class="toggle-title">تنبيه حجز جديد بالواتساب</span>
+                      <span class="toggle-desc">إشعار الطبيب فوراً برسالة واتساب عند وجود حجز جديد.</span>
+                    </div>
+                    <input type="checkbox" id="notif-doc-wa-new" class="custom-switch-checkbox">
+                  </label>
+
+                  <label class="toggle-switch-wrapper">
+                    <div class="toggle-text">
+                      <span class="toggle-title">التقرير التشغيلي اليومي الملخص</span>
+                      <span class="toggle-desc">إرسال تقرير ملخص إحصائي يومي بالبريد الإلكتروني عند إغلاق العيادة (10:00 مساءً).</span>
+                    </div>
+                    <input type="checkbox" id="notif-doc-email-daily" class="custom-switch-checkbox">
+                  </label>
+
+                  <label class="toggle-switch-wrapper">
+                    <div class="toggle-text">
+                      <span class="toggle-title">التقرير المالي والأداء الأسبوعي</span>
+                      <span class="toggle-desc">إرسال تحليل مالي متكامل وأداء البوت مساء كل جمعة.</span>
+                    </div>
+                    <input type="checkbox" id="notif-doc-email-weekly" class="custom-switch-checkbox">
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Prescription Template -->
+            <div class="clinic-card">
+              <div class="card-header">
+                <h2><i class="fa-solid fa-file-prescription"></i> قالب الروشتة الطبية</h2>
+                <div class="card-header-actions">
+                  <button class="btn-sm btn-outline" onclick="savePrescriptionSettings()"><i class="fa-solid fa-save"></i> حفظ القالب</button>
+                </div>
+              </div>
+              <div class="card-body card-body-padded">
+                <div class="settings-form-stack">
+                  <div class="form-group form-group--flush">
+                    <label>عنوان الروشتة (عربي)</label>
+                    <input type="text" id="rx-setting-header-ar" placeholder="عيادة النور لطب الأسنان">
+                  </div>
+                  <div class="form-group form-group--flush">
+                    <label>عنوان الروشتة (إنجليزي)</label>
+                    <input type="text" id="rx-setting-header-en" placeholder="Al Nour Dental Clinic">
+                  </div>
+                  <div class="form-group form-group--flush">
+                    <label>لون القالب</label>
+                    <input type="color" id="rx-setting-theme" value="#0ea5e9">
+                  </div>
+                  <div class="form-group form-group--flush">
+                    <label>شعار الروشتة (صورة)</label>
+                    <input type="file" id="rx-setting-logo" accept="image/*" onchange="handleRxLogoUpload(event)">
+                    <span id="rx-setting-logo-name">لم يتم اختيار صورة (يستخدم الشعار النصي الافتراضي)</span>
+                  </div>
+                  <div class="form-group form-group--flush">
+                    <label>نص ذيل الروشتة</label>
+                    <textarea id="rx-setting-footer" rows="2" placeholder="يرجى اتباع التعليمات بدقة — لا تتردد في التواصل معنا"></textarea>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 7: Insurance & Refunds -->
+          <div class="settings-tab-panel" id="tab-insurance">
+            <!-- Insurance -->
+            <div class="clinic-card card--relative" id="insurance-card">
+              <div class="card-header">
+                <h2><i class="fa-solid fa-shield-halved"></i> جهات التأمين الصحي المتعاقد معها</h2>
+              </div>
+              <div class="card-body card-body-collapse--relative card-body-padded">
+                <form id="add-insurance-form" onsubmit="addInsuranceCompany(event)" class="form-inline-row" onclick="event.stopPropagation()">
+                  <input type="text" id="ins-new-name-ar" placeholder="اسم الجهة (عربي)" required class="form-inline-input">
+                  <input type="text" id="ins-new-name-en" placeholder="Name (English)" required class="form-inline-input">
+                  <input type="number" id="ins-new-coverage" placeholder="نسبة التغطية %" min="1" max="100" required class="form-inline-input">
+                  <button type="submit" class="btn-sm btn-outline"><i class="fa-solid fa-plus"></i> إضافة</button>
+                </form>
+                <table class="clinic-table" id="insurance-table">
+                  <thead><tr><th>الجهة</th><th>التغطية</th><th>الحالة</th></tr></thead>
+                  <tbody id="insurance-list-body">
+                    <tr><td colspan="3" class="loading-cell"><i class="fa-solid fa-spinner fa-spin"></i> جاري التحميل...</td></tr>
+                  </tbody>
+                </table>
+                <!-- Premium Locked Overlay -->
+                <div id="insurance-locked-overlay" class="premium-locked-overlay">
+                  <i class="fa-solid fa-lock"></i>
+                  <h3>صلاحية التأمين الصحي غير مفعلة لباقتك</h3>
+                  <p>قم بترقية اشتراكك لتفعيل إدارة جهات التأمين والتحصيل التلقائي.</p>
+                  <button class="btn-upgrade" onclick="showToast('يرجى التواصل مع مدير النظام لطلب الترقية للباقة الاحترافية.', 'info')">طلب ترقية الباقة</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Refunds -->
+            <div class="clinic-card card--relative" id="refund-card">
+              <div class="card-header">
+                <h2><i class="fa-solid fa-money-bill-transfer"></i> سياسة استرداد الأموال وإلغاء الحجز</h2>
+                <div class="card-header-actions">
+                  <button class="btn-sm btn-outline" onclick="saveRefundSettings()"><i class="fa-solid fa-save"></i> حفظ السياسة</button>
+                </div>
+              </div>
+              <div class="card-body card-body-collapse--relative card-body-padded">
+                <div class="settings-form-stack">
+                  <div class="form-group form-group--flush">
+                    <label>وجهة الاسترداد الافتراضية</label>
+                    <select id="op-refund-destination">
+                      <option value="wallet">رصيد المحفظة (للاستخدام في الحجوزات القادمة)</option>
+                      <option value="original">إعادة المبلغ لطريقة الدفع الأصلية</option>
+                      <option value="manual">استرداد يدوي — يتواصل الإداري مع المريض</option>
+                    </select>
+                    <span>تحديد كيف يتم رد المبلغ المالي للمريض عند إلغاء الحجز المدفوع ضمن المهلة المسموحة.</span>
+                  </div>
+                </div>
+                <!-- Premium Locked Overlay -->
+                <div id="refunds-locked-overlay" class="premium-locked-overlay">
+                  <i class="fa-solid fa-lock"></i>
+                  <h3>صلاحية الاسترداد الآلي غير مفعلة</h3>
+                  <p>قم بالترقية لتفعيل سياسة الاسترداد التلقائي للمبالغ المدفوعة.</p>
+                  <button class="btn-upgrade" onclick="showToast('يرجى التواصل مع مدير النظام لطلب الترقية.', 'info')">طلب ترقية الباقة</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ══════ MODALS ══════ -->
+
+  <!-- Service Add/Edit Modal -->
+  <div class="modal-overlay" id="modal-service">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="service-modal-title"><i class="fa-solid fa-hand-holding-medical"></i> إضافة خدمة جديدة</h2>
+        <button class="modal-close" onclick="closeModal('modal-service')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <form id="add-service-form" onsubmit="submitServiceForm(event)">
+          <input type="hidden" id="service-id" value="">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>اسم الخدمة بالعربية</label>
+              <input type="text" id="service-name" placeholder="مثال: كشف عام" required>
+            </div>
+            <div class="form-group">
+              <label>اسم الخدمة بالإنجليزية</label>
+              <input type="text" id="service-name-en" placeholder="Example: General Exam">
+            </div>
+            <div class="form-group">
+              <label>السعر (ج.م)</label>
+              <input type="number" id="service-price" placeholder="مثال: 300" min="0" required>
+            </div>
+            <div class="form-group">
+              <label>المدة (دقيقة)</label>
+              <input type="number" id="service-duration" placeholder="مثال: 30" min="5" required>
+            </div>
+            <div class="form-group">
+              <label>الفئة</label>
+              <select id="service-category">
+                <option value="exam">كشف</option>
+                <option value="followup">متابعة</option>
+                <option value="procedure">إجراء طبي</option>
+                <option value="cosmetic">تجميلي</option>
+              </select>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn-outline" onclick="closeModal('modal-service')">إلغاء</button>
+            <button type="submit" class="btn-primary-cta" id="service-submit-btn"><i class="fa-solid fa-plus"></i> حفظ الخدمة</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Doctor Modal -->
+  <div class="modal-overlay" id="modal-add-doctor">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2><i class="fa-solid fa-user-doctor"></i> إضافة طبيب جديد</h2>
+        <button class="btn-icon" onclick="closeModal('modal-add-doctor')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <form onsubmit="submitNewDoctor(event)">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>الاسم الكامل</label>
+              <input type="text" id="new-doctor-name" placeholder="مثال: د. أحمد حسن" required>
+            </div>
+            <div class="form-group">
+              <label>التخصص</label>
+              <input type="text" id="new-doctor-spec" placeholder="مثال: طب أسنان عام" required>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary-cta" onclick="closeModal('modal-add-doctor')">إلغاء</button>
+            <button type="submit" class="btn-primary-cta"><i class="fa-solid fa-plus"></i> إضافة الطبيب</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Client-side Tab Switcher Script -->
+  <script>
+    function switchSettingsTab(tabId) {
+      // Deactivate all tab buttons
+      const buttons = document.querySelectorAll('.settings-tab-btn');
+      buttons.forEach(btn => btn.classList.remove('active'));
+
+      // Deactivate all panels
+      const panels = document.querySelectorAll('.settings-tab-panel');
+      panels.forEach(p => p.classList.remove('active'));
+
+      // Find trigger button and activate it
+      const activeBtn = document.querySelector(`[onclick="switchSettingsTab('${tabId}')"]`);
+      if (activeBtn) activeBtn.classList.add('active');
+
+      // Activate corresponding panel
+      const targetPanel = document.getElementById(tabId);
+      if (targetPanel) {
+        targetPanel.classList.add('active');
+      }
+    }
+  </script>
+
+  <!-- Shared & Specific JS Scripts -->
+  <script src="core/api.js"></script>
+  <script src="core/shared.js"></script>
+  <script src="settings.js"></script>
+</body>
+</html>

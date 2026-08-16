@@ -1,0 +1,21 @@
+{
+  "bot_greeting": "مرحباً بك في نظام الحجز الذكي لعيادة النور!\n\nيرجى اختيار الرقم المناسب للمتابعة:\n1. حجز موعد جديد\n2. الاستعلام عن موعد\n3. إلغاء حجز قائم",
+  "whatsapp": {
+    "enabled": false,
+    "phone_number_id": "",
+    "business_account_id": "",
+    "access_token": "",
+    "webhook_url": "https://api.smartclinic.com/webhooks/whatsapp/tenant-uuid-noor",
+    "verify_token": "scs_verify_2k4ykoqw",
+    "status": "disconnected",
+    "last_tested_at": null
+  },
+  "telegram": {
+    "enabled": true,
+    "bot_token": "8791878209:AAHKnqb5cDmtMCVRIszTh0S09FVsoBMiR74",
+    "bot_username": "تجربة",
+    "webhook_url": "https://api.smartclinic.com/webhooks/telegram/tenant-uuid-noor",
+    "status": "connected",
+    "last_tested_at": "2026-07-05T10:57:33.161Z"
+  }
+}

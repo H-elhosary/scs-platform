@@ -1,0 +1,25 @@
+{
+  "name": "smart-clinic-os-mock-server",
+  "version": "1.0.0",
+  "description": "Mock API Server with Swagger UI for Smart Clinic OS",
+  "main": "mock_server.js",
+  "scripts": {
+    "start": "node mock_server.js",
+    "dev": "node mock_server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "swagger-ui-express": "^5.0.0",
+    "yamljs": "^0.3.0"
+  },
+  "keywords": [
+    "swagger",
+    "openapi",
+    "express",
+    "mock",
+    "scs"
+  ],
+  "author": "Antigravity",
+  "license": "ISC"
+}

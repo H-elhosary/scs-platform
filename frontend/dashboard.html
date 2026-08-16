@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>لوحة تحكم العيادة — الرئيسية</title>
+  <!-- Google Fonts: Cairo & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Shared Stylesheet -->
+  <link rel="stylesheet" href="shared/shared.css?v=2.0">
+</head>
+<body class="clinic-body">
+  <div class="clinic-layout">
+    <!-- Sidebar is dynamically injected here by shared.js -->
+    <main class="clinic-main" id="clinic-main">
+      <div class="view-header">
+        <div>
+          <h1 id="welcome-doctor-title">مرحباً، د. محمد نور</h1>
+          <p class="view-subtitle" id="today-date-display">اليوم — </p>
+        </div>
+        <div class="view-header-actions">
+          <button class="btn-primary-cta" onclick="location.href='calendar.html?book=true'">
+            <i class="fa-solid fa-plus"></i> حجز جديد
+          </button>
+        </div>
+      </div>
+
+      <!-- KPI Cards -->
+      <div class="kpi-grid" id="kpi-grid">
+        <div class="clinic-kpi-card">
+          <div class="kpi-icon-wrap bg-cyan"><i class="fa-solid fa-user-check"></i></div>
+          <div class="kpi-body">
+            <span class="kpi-label">مرضى اليوم</span>
+            <span class="kpi-value" id="kpi-patients-today">—</span>
+          </div>
+        </div>
+        <div class="clinic-kpi-card">
+          <div class="kpi-icon-wrap bg-green"><i class="fa-solid fa-calendar-check"></i></div>
+          <div class="kpi-body">
+            <span class="kpi-label">حجوزات مؤكدة</span>
+            <span class="kpi-value" id="kpi-confirmed">—</span>
+          </div>
+        </div>
+        <div class="clinic-kpi-card">
+          <div class="kpi-icon-wrap bg-gold"><i class="fa-solid fa-coins"></i></div>
+          <div class="kpi-body">
+            <span class="kpi-label">إيرادات اليوم</span>
+            <span class="kpi-value" id="kpi-revenue">—</span>
+          </div>
+        </div>
+        <div class="clinic-kpi-card">
+          <div class="kpi-icon-wrap bg-purple"><i class="fa-solid fa-chart-line"></i></div>
+          <div class="kpi-body">
+            <span class="kpi-label">نسبة الحضور</span>
+            <span class="kpi-value" id="kpi-attendance">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Queue Status Panel -->
+      <div class="clinic-card queue-status-card" id="queue-status-panel">
+        <div class="card-header">
+          <h2><i class="fa-solid fa-tv"></i> حالة غرفة الكشف وقائمة الانتظار</h2>
+          <div class="card-header-actions">
+            <button class="btn-sm btn-outline" onclick="refreshQueueStatus()"><i class="fa-solid fa-arrows-rotate"></i> تحديث</button>
+          </div>
+        </div>
+        <div class="queue-grid">
+          <!-- Current In Exam -->
+          <div class="queue-cell" id="qs-current-exam">
+            <div class="queue-icon queue-icon--success">
+              <i class="fa-solid fa-stethoscope"></i>
+            </div>
+            <div>
+              <div class="queue-label">في الكشف الآن</div>
+              <div class="queue-value" id="qs-exam-name">لا يوجد مريض</div>
+              <div class="queue-sub" id="qs-exam-sub">غرفة الكشف شاغرة</div>
+            </div>
+          </div>
+          <!-- Waiting Count -->
+          <div class="queue-cell">
+            <div class="queue-icon queue-icon--warning">
+              <i class="fa-solid fa-users-line"></i>
+            </div>
+            <div>
+              <div class="queue-label">في الانتظار</div>
+              <div class="queue-value queue-value--lg queue-value--warning" id="qs-waiting-count">0</div>
+              <div class="queue-sub">مريض</div>
+            </div>
+          </div>
+          <!-- Next In Line -->
+          <div class="queue-cell">
+            <div class="queue-icon queue-icon--info">
+              <i class="fa-solid fa-forward"></i>
+            </div>
+            <div>
+              <div class="queue-label">التالي في الدور</div>
+              <div class="queue-value" id="qs-next-name">—</div>
+              <div class="queue-sub" id="qs-next-sub">لا يوجد منتظرين</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Today's Queue -->
+      <div class="clinic-card">
+        <div class="card-header">
+          <h2><i class="fa-solid fa-list-check"></i> قائمة مواعيد اليوم</h2>
+          <div class="card-header-actions">
+            <button class="btn-sm btn-outline" onclick="callNextPatient()">
+              <i class="fa-solid fa-bullhorn"></i> استدعاء التالي
+            </button>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="clinic-table" id="today-queue-table">
+            <thead>
+              <tr>
+                <th class="th-sortable" id="th-queue" onclick="sortByColumn('queue_number')">#</th>
+                <th class="th-sortable" id="th-patient" onclick="sortByColumn('patient_name')">المريض</th>
+                <th class="th-sortable" id="th-time" onclick="sortByColumn('time')">الوقت</th>
+                <th class="th-sortable" id="th-service" onclick="sortByColumn('service_name')">الخدمة</th>
+                <th class="th-sortable" id="th-location" onclick="sortByColumn('location')">الفرع/العيادة</th>
+                <th class="th-sortable" id="th-visit" onclick="sortByColumn('visit_type')">نوع الزيارة</th>
+                <th class="th-sortable" id="th-payment" onclick="sortByColumn('payment_method')">الدفع</th>
+                <th class="th-sortable" id="th-status" onclick="sortByColumn('status')">الحالة</th>
+                <th>إجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="today-queue-body">
+              <tr><td colspan="9" class="loading-cell"><i class="fa-solid fa-spinner fa-spin"></i> جاري التحميل...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Check-In Modal -->
+  <div id="checkin-modal" class="checkin-overlay">
+    <div class="checkin-card">
+      <div class="checkin-icon">
+        <i class="fa-solid fa-right-to-bracket"></i>
+      </div>
+      <h3 class="checkin-title">تسجيل حضور المريض</h3>
+      <p class="checkin-subtitle" id="checkin-modal-patient">—</p>
+      
+      <div class="checkin-actions" id="checkin-modal-priority">
+        <button class="btn-checkin btn-checkin--normal" onclick="confirmCheckIn(false)">
+          <i class="fa-solid fa-user-check"></i> تسجيل حضور عادي
+        </button>
+        <button class="btn-checkin btn-checkin--urgent" onclick="confirmCheckIn(true)">
+          <i class="fa-solid fa-bolt"></i> حالة عاجلة — أولوية قصوى
+        </button>
+      </div>
+      
+      <button class="btn-checkin--cancel" onclick="closeCheckInModal()">إلغاء</button>
+    </div>
+  </div>
+
+  <!-- Shared & Specific JS Scripts -->
+  <script src="shared/shared.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+uid=3_0 RootWebArea "Smart Clinic OS - تسجيل دخول العيادة" url="http://localhost:3001/index.html"
+  uid=3_1 banner
+    uid=3_2 button "Toggle Language"
+  uid=3_3 main
+    uid=3_4 image "Futuristic Smart Clinic" url="http://localhost:3001/assets/login_illustration.png"
+    uid=3_5 StaticText "Smart Clinic OS"
+    uid=3_6 heading "Integrated Digital Medical Infrastructure" level="1"
+    uid=3_7 StaticText "Complete clinic control, instant calendar scheduling, automatic AI triage, and offline data synchronization."
+    uid=3_8 heading "Smart Clinic OS" level="2"
+    uid=3_9 StaticText "Smart Clinic Portal"
+    uid=3_10 heading "Medical Staff Login" level="3"
+    uid=3_11 StaticText "Enter your registered email and password for your clinic"
+    uid=3_12 form
+      uid=3_13 StaticText "Email Address"
+      uid=3_14 textbox "Email Address" required
+      uid=3_15 StaticText "Password"
+      uid=3_16 textbox "Password" required
+      uid=3_17 button "Sign In"

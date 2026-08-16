@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>لوحة تحكم العيادة — صندوق الوارد والرسائل</title>
+  <!-- Google Fonts: Cairo & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Core Design System -->
+  <link rel="stylesheet" href="core/core.css">
+  <!-- Page Specific Stylesheet -->
+  <link rel="stylesheet" href="pages/inbox/inbox.css">
+</head>
+<body class="clinic-body">
+  <div class="clinic-layout">
+    <!-- Sidebar is dynamically injected here by shared.js -->
+    <main class="clinic-main clinic-main--flush" id="clinic-main">
+      <div class="chat-container">
+        <!-- Chat Sidebar (conversations) -->
+        <div class="chat-sidebar">
+          <div class="chat-sidebar-header">
+            <div class="chat-sidebar-title-row">
+              <h2>
+                <i class="fa-solid fa-comments" style="color: #2563eb;"></i>
+                المحادثات الواردة
+              </h2>
+              <span class="chat-total-badge" id="chat-total-count">0 محادثة</span>
+            </div>
+
+            <!-- Search -->
+            <div class="chat-search-wrap">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" class="chat-search-input" id="chat-search" placeholder="بحث بالاسم أو رقم الهاتف..." oninput="filterConversations()">
+            </div>
+
+            <!-- Channel Filter Chips -->
+            <div class="chat-filter-chips">
+              <button type="button" class="chat-filter-chip active" data-filter="all" onclick="setChannelFilter('all')">
+                الكل
+              </button>
+              <button type="button" class="chat-filter-chip" data-filter="unread" onclick="setChannelFilter('unread')">
+                <i class="fa-solid fa-circle" style="font-size: 8px; color: #ef4444;"></i> غير مقروء
+              </button>
+              <button type="button" class="chat-filter-chip" data-filter="whatsapp" onclick="setChannelFilter('whatsapp')">
+                <i class="fa-brands fa-whatsapp" style="color: #16a34a;"></i> واتساب
+              </button>
+              <button type="button" class="chat-filter-chip" data-filter="telegram" onclick="setChannelFilter('telegram')">
+                <i class="fa-brands fa-telegram" style="color: #0284c7;"></i> تليجرام
+              </button>
+            </div>
+          </div>
+
+          <!-- Conversations List -->
+          <div class="chat-conversations-list" id="chat-conversations-list">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+
+        <!-- Chat Window -->
+        <div class="chat-window" id="chat-window">
+          <!-- Default Empty State -->
+          <div class="chat-empty-state">
+            <div class="chat-empty-illustration">
+              <i class="fa-solid fa-comments"></i>
+            </div>
+            <h3>صندوق الرسائل والمحادثات المباشرة</h3>
+            <p>اختر محادثة من القائمة الجانبية للتواصل المباشر مع المريض ومتابعة استفسارات الحجز والردود الآلية.</p>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Shared & Specific JS Scripts -->
+  <script src="core/api.js"></script>
+  <script src="core/shared.js"></script>
+  <script src="inbox.js"></script>
+</body>
+</html>

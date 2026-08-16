@@ -1,0 +1,132 @@
+/* =============================================
+   SMART CLINIC OS — Design System
+   Core Design Tokens & CSS Variables
+   Version: 4.0 — Ultra-Clean Medical Light Theme
+   ============================================= */
+
+/* =============================================
+   DESIGN TOKENS (LIGHT MODE)
+   ============================================= */
+:root {
+  /* === Brand Colors — Clean Medical Palette === */
+  --scs-primary: #2563eb;
+  --scs-primary-hover: #1d4ed8;
+  --scs-primary-light: #3b82f6;
+  --scs-primary-glow: rgba(37, 99, 235, 0.08);
+  --scs-primary-border: #bfdbfe;
+  --scs-gradient: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  --scs-gradient-active: #eff6ff;
+
+  /* === Semantic Colors === */
+  --scs-success: #059669;
+  --scs-success-light: #10b981;
+  --scs-success-glow: #ecfdf5;
+  --scs-danger: #dc2626;
+  --scs-danger-light: #ef4444;
+  --scs-danger-glow: #fef2f2;
+  --scs-warning: #d97706;
+  --scs-warning-light: #f59e0b;
+  --scs-warning-glow: #fffbeb;
+  --scs-purple: #7c3aed;
+  --scs-purple-light: #8b5cf6;
+  --scs-info: #0284c7;
+  --scs-info-light: #06b6d4;
+  --scs-info-glow: #f0f9ff;
+
+  /* === Clean Light Backgrounds === */
+  --scs-bg-body: #f8fafc;
+  --scs-bg-main: #f8fafc;
+  --scs-bg-sidebar: #ffffff;
+  --scs-bg-card: #ffffff;
+  --scs-bg-surface: #ffffff;
+  --scs-bg-elevated: #ffffff;
+  --scs-bg-input: #ffffff;
+  --scs-bg-hover: #f1f5f9;
+  --scs-bg-subtle: #f8fafc;
+  --scs-bg-glass: #ffffff;
+  --scs-bg-skeleton: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+
+  /* === Clean Light Borders === */
+  --scs-border: #e2e8f0;
+  --scs-border-light: #f1f5f9;
+  --scs-border-subtle: #e2e8f0;
+  --scs-border-input: #cbd5e1;
+  --scs-border-focus: #2563eb;
+
+  /* === Crisp Text Colors === */
+  --scs-text: #334155;
+  --scs-text-bright: #0f172a;
+  --scs-text-heading: #0f172a;
+  --scs-text-muted: #64748b;
+  --scs-text-label: #475569;
+  --scs-text-dim: #94a3b8;
+
+  /* === Typography === */
+  --scs-font-ar: 'Cairo', sans-serif;
+  --scs-font-en: 'Outfit', sans-serif;
+  --scs-font-mono: 'Outfit', monospace;
+
+  /* === Border Radius === */
+  --scs-radius-sm: 6px;
+  --scs-radius-md: 8px;
+  --scs-radius-lg: 10px;
+  --scs-radius-xl: 12px;
+  --scs-radius-2xl: 14px;
+  --scs-radius-pill: 20px;
+  --scs-radius-round: 50%;
+
+  /* === Soft Clean Shadows === */
+  --scs-shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
+  --scs-shadow-hover: 0 4px 12px 0 rgba(0, 0, 0, 0.07);
+  --scs-shadow-primary: 0 2px 8px rgba(37, 99, 235, 0.2);
+  --scs-shadow-toast: 0 10px 25px -5px rgba(15, 23, 42, 0.15);
+
+  /* === Transitions === */
+  --scs-transition: all 0.2s ease;
+  --scs-transition-fast: all 0.15s ease;
+  --scs-transition-smooth: all 0.25s ease;
+
+  /* === Legacy compatibility === */
+  --primary: var(--scs-primary);
+  --primary-hover: var(--scs-primary-hover);
+  --accent: var(--scs-success);
+  --danger: var(--scs-danger);
+  --warning: var(--scs-warning);
+  --bg-dark: var(--scs-bg-body);
+  --panel-bg: var(--scs-bg-main);
+  --surface-bg: var(--scs-bg-elevated);
+  --border-color: var(--scs-border);
+  --text-main: var(--scs-text);
+  --text-muted: var(--scs-text-muted);
+  --text-accent-blue: var(--scs-primary);
+  --input-bg: var(--scs-bg-input);
+  --input-border: var(--scs-border-input);
+  --glass-bg: var(--scs-bg-card);
+  --glass-border: var(--scs-border);
+  --font-ar: var(--scs-font-ar);
+  --font-en: var(--scs-font-en);
+}
+
+/* === Box Sizing Reset === */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+/* === Custom Scrollbars === */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

@@ -1,0 +1,12 @@
+/* =============================================
+   SMART CLINIC OS — Core Bundle
+   Imports all core modules in correct order
+   ============================================= */
+
+@import url('./design-system.css');
+@import url('./layout.css');
+@import url('./components.css');
+@import url('./forms.css');
+@import url('./animations.css');
+@import url('./utilities.css');
+@import url('./responsive.css');

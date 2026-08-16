@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Clinic OS - تسجيل دخول العيادة</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+  <!-- Toast Notifications Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Top Action Bar (Language Toggler) -->
+  <header class="top-bar">
+    <button id="lang-toggle-btn" class="btn-secondary" aria-label="Toggle Language">
+      <span class="lang-text">English</span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="2" y1="12" x2="22" y2="12"></line>
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+      </svg>
+    </button>
+  </header>
+
+  <main class="login-container">
+
+    <!-- Left Half: Futuristic Smart Clinic Illustration -->
+    <section class="left-panel">
+      <img src="assets/login_illustration.png" alt="Futuristic Smart Clinic" class="bg-image">
+      <div class="glass-overlay">
+        <div class="overlay-content">
+          <span class="badge" data-i18n="badge_text">نظام تشغيل العيادة الذكي</span>
+          <h1 data-i18n="left_title">بنية تحتية طبية رقمية متكاملة</h1>
+          <p data-i18n="left_desc">تحكم كامل بالعيادة، إدارة الكاليندر الفوري، الفرز الطبي التلقائي بالذكاء الاصطناعي،
+            ومزامنة البيانات في وضع عدم الاتصال.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Half: Form Container -->
+    <section class="right-panel">
+      <div class="form-wrapper">
+
+        <!-- App Logo & Branding -->
+        <div class="brand">
+          <div class="logo-icon">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+            </svg>
+          </div>
+          <div class="brand-text">
+            <h2>Smart Clinic OS</h2>
+            <span data-i18n="brand_sub">بوابة العيادة الذكية</span>
+          </div>
+        </div>
+
+        <!-- No tabs — clinic only -->
+        <nav class="tabs-container" id="auth-tabs" aria-label="Authentication tabs" style="display:none;">
+          <a class="tab-btn active" data-target="clinic" href="#" data-i18n="tab_clinic">بوابة العيادة</a>
+        </nav>
+
+        <!-- Alert Notification Panel -->
+        <div id="alert-panel" class="alert-box hide">
+          <div class="alert-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+          <div class="alert-msg" id="alert-msg"></div>
+        </div>
+
+        <!-- Stage 1: Login Form -->
+        <div id="login-stage" class="form-stage">
+          <div class="stage-header">
+            <h3 id="stage-title" data-i18n="login_title_clinic">تسجيل دخول الطاقم الطبي</h3>
+            <p id="stage-desc" data-i18n="login_desc_clinic">أدخل البريد الإلكتروني وكلمة المرور المسجلة لعيادتك</p>
+          </div>
+
+          <form id="login-form">
+            <div class="input-group">
+              <label for="email" data-i18n="label_email">البريد الإلكتروني</label>
+              <div class="input-field">
+                <input type="email" id="email" required placeholder="name@domain.com" autocomplete="email">
+              </div>
+            </div>
+
+            <div class="input-group">
+              <div class="label-wrapper">
+                <label for="password" data-i18n="label_password">كلمة المرور</label>
+              </div>
+              <div class="input-field">
+                <input type="password" id="password" required placeholder="••••••••••••"
+                  autocomplete="current-password">
+              </div>
+            </div>
+
+            <button type="submit" class="btn-primary" id="login-submit-btn">
+              <span class="btn-text" data-i18n="btn_login">تسجيل الدخول</span>
+              <div class="spinner hide"></div>
+            </button>
+          </form>
+        </div>
+
+        <!-- OTP stage hidden — not used for clinic -->
+        <div id="otp-stage" class="form-stage hide">
+          <div class="stage-header">
+            <h3 data-i18n="otp_title">رمز التحقق الثنائي (2FA)</h3>
+            <p data-i18n="otp_desc">تم إرسال كود التحقق إلى بريدك الإلكتروني.</p>
+          </div>
+          <div class="console-otp-alert">
+            <i class="fa-solid fa-circle-info text-info"></i>
+            <span data-i18n="otp_console_notice">تم طباعة الكود (123456) في Console.</span>
+          </div>
+          <form id="otp-form">
+            <div class="otp-inputs-wrapper">
+              <input type="text" class="otp-digit" maxlength="1" pattern="[0-9]" required aria-label="Digit 1">
+              <input type="text" class="otp-digit" maxlength="1" pattern="[0-9]" required aria-label="Digit 2">
+              <input type="text" class="otp-digit" maxlength="1" pattern="[0-9]" required aria-label="Digit 3">
+              <input type="text" class="otp-digit" maxlength="1" pattern="[0-9]" required aria-label="Digit 4">
+              <input type="text" class="otp-digit" maxlength="1" pattern="[0-9]" required aria-label="Digit 5">
+              <input type="text" class="otp-digit" maxlength="1" pattern="[0-9]" required aria-label="Digit 6">
+            </div>
+            <button type="submit" class="btn-primary" id="otp-submit-btn">
+              <span class="btn-text" data-i18n="btn_verify">تأكيد الرمز والدخول</span>
+              <div class="spinner hide"></div>
+            </button>
+            <button type="button" class="btn-link" id="otp-back-btn" data-i18n="btn_back">العودة لشاشة الدخول</button>
+          </form>
+        </div>
+
+        <!-- Stage 3: Success Screen -->
+        <div id="success-stage" class="form-stage hide">
+          <div class="success-container">
+            <div class="success-stage-icon text-success"><i class="fa-solid fa-circle-check"></i></div>
+            <h3 data-i18n="success_title" class="success-stage-title">تم تسجيل الدخول بنجاح!</h3>
+            <p id="success-user-welcome" class="success-stage-desc"></p>
+          </div>
+
+          <div id="success-clinic-card" class="success-dashboard-card succ-card hide">
+            <h4 class="succ-card-header">
+              <i class="fa-solid fa-hospital text-primary"></i> بيانات وتفاصيل بوابة العيادة
+            </h4>
+            <div class="succ-card-grid">
+              <div>
+                <span class="succ-card-label">رابط العيادة الفرعي:</span>
+                <span id="succ-clinic-url" class="succ-card-value"></span>
+              </div>
+              <div>
+                <span class="succ-card-label">خطة الاشتراك:</span>
+                <span id="succ-clinic-plan" class="plan-badge plan-pro succ-card-badge"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="token-details-card token-card">
+            <div class="token-card-header">
+              <span class="status-indicator token-status">● Active Session</span>
+              <span class="token-label token-type">JSON Web Token</span>
+            </div>
+            <div class="token-area">
+              <div class="token-display token-box" id="token-display-box"></div>
+              <button type="button" id="btn-copy-token" class="btn-secondary btn-copy-wrap" title="Copy Token">
+                <i class="fa-regular fa-copy btn-copy-icon"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="success-actions">
+            <div class="success-actions-row">
+              <a href="dashboard.html" id="btn-go-to-dashboard" class="btn-primary btn-nav-dashboard">
+                <i class="fa-solid fa-house-medical"></i> دخول لوحة التحكم
+              </a>
+              <a href="bot.html" id="btn-go-to-bot" class="btn-secondary btn-nav-bot">
+                <i class="fa-solid fa-robot"></i> محاكي الواتساب
+              </a>
+            </div>
+            <button type="button" class="btn-secondary btn-logout-succ" id="logout-btn" data-i18n="btn_logout">تسجيل الخروج</button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <script src="app.js?v=2"></script>
+</body>
+
+</html>

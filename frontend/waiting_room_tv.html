@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>شاشة غرفة الانتظار — Smart Clinic OS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Outfit:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #030712;
+      color: #f8fafc;
+      font-family: 'Cairo', 'Outfit', sans-serif;
+      overflow: hidden;
+      height: 100vh;
+    }
+
+    .tv-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto 1fr;
+      height: 100vh;
+      gap: 0;
+    }
+
+    /* Header */
+    .tv-header {
+      grid-column: 1 / -1;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      border-bottom: 2px solid rgba(14,165,233,0.2);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 40px;
+    }
+
+    .tv-brand {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .tv-logo {
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #0f766e 0%, #0ea5e9 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+    }
+
+    .tv-brand h1 {
+      font-size: 26px;
+      font-weight: 900;
+      color: #f8fafc;
+    }
+
+    .tv-brand span {
+      font-size: 14px;
+      color: #64748b;
+      display: block;
+      font-weight: 600;
+    }
+
+    .tv-clock {
+      text-align: left;
+    }
+
+    .tv-clock-time {
+      font-size: 42px;
+      font-weight: 900;
+      font-family: 'Outfit', monospace;
+      color: #0ea5e9;
+      line-height: 1;
+    }
+
+    .tv-clock-date {
+      font-size: 14px;
+      color: #64748b;
+      font-weight: 600;
+    }
+
+    /* Current Patient */
+    .tv-current {
+      background: linear-gradient(180deg, rgba(15,23,42,0.95) 0%, rgba(30,41,59,0.6) 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      border-left: 1px solid rgba(255,255,255,0.04);
+    }
+
+    .tv-current-label {
+      font-size: 16px;
+      font-weight: 700;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 20px;
+    }
+
+    .tv-current-number {
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #0f766e 0%, #0ea5e9 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 72px;
+      font-weight: 900;
+      font-family: 'Outfit', sans-serif;
+      color: white;
+      margin-bottom: 24px;
+      box-shadow: 0 0 40px rgba(14,165,233,0.3), 0 0 80px rgba(14,165,233,0.1);
+      animation: pulseGlow 3s infinite ease-in-out;
+    }
+
+    @keyframes pulseGlow {
+      0%, 100% { box-shadow: 0 0 40px rgba(14,165,233,0.3), 0 0 80px rgba(14,165,233,0.1); }
+      50% { box-shadow: 0 0 60px rgba(14,165,233,0.5), 0 0 120px rgba(14,165,233,0.2); }
+    }
+
+    .tv-current-name {
+      font-size: 36px;
+      font-weight: 800;
+      color: #f8fafc;
+      margin-bottom: 8px;
+    }
+
+    .tv-current-doctor {
+      font-size: 16px;
+      color: #0ea5e9;
+      font-weight: 600;
+    }
+
+    .tv-current-status {
+      margin-top: 20px;
+      padding: 10px 30px;
+      border-radius: 30px;
+      background: rgba(16,185,129,0.12);
+      color: #10b981;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    /* Waiting List */
+    .tv-waiting {
+      background: rgba(15, 23, 42, 0.8);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .tv-waiting-header {
+      padding: 24px 32px 16px;
+      font-size: 18px;
+      font-weight: 800;
+      color: #f1f5f9;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .tv-waiting-header i { color: #f59e0b; }
+
+    .tv-queue-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 24px;
+    }
+
+    .tv-queue-item {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 16px 20px;
+      border-radius: 12px;
+      margin-bottom: 8px;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.04);
+      transition: all 0.3s ease;
+    }
+
+    .tv-queue-item:nth-child(1) {
+      border-color: rgba(245,158,11,0.2);
+      background: rgba(245,158,11,0.04);
+    }
+
+    .tv-queue-num {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.06);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      font-weight: 800;
+      font-family: 'Outfit', sans-serif;
+      color: #94a3b8;
+      flex-shrink: 0;
+    }
+
+    .tv-queue-item:nth-child(1) .tv-queue-num {
+      background: rgba(245,158,11,0.15);
+      color: #f59e0b;
+    }
+
+    .tv-queue-name {
+      font-size: 20px;
+      font-weight: 700;
+      color: #f1f5f9;
+    }
+
+    /* Flash animation for new call */
+    .tv-flash {
+      animation: flashCall 0.5s ease 3;
+    }
+
+    @keyframes flashCall {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    .tv-empty {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      color: #334155;
+    }
+
+    .tv-empty i { font-size: 48px; margin-bottom: 16px; }
+    @keyframes pulseScale {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.08); opacity: 0.8; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Autoplay Enable Banner -->
+  <div id="autoplay-banner" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(3,7,18,0.98); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; font-family: Cairo, sans-serif; cursor: pointer;" onclick="enableAudioAndAnnounce()">
+    <div style="width: 100px; height: 100px; border-radius: 50%; background: rgba(14,165,233,0.1); border: 2px dashed #0ea5e9; display: flex; align-items: center; justify-content: center; color: #0ea5e9; font-size: 36px; animation: pulseScale 2s infinite;">
+      <i class="fa-solid fa-volume-high"></i>
+    </div>
+    <h2 style="font-weight: 800; color: #f8fafc; font-size: 24px;">شاشة الانتظار جاهزة للتشغيل</h2>
+    <p style="color: #64748b; font-size: 14px; text-align: center; max-width: 400px; line-height: 1.6; padding: 0 20px;">بسبب سياسات الأمان في المتصفحات، يرجى **الضغط في أي مكان على الشاشة** لتنشيط الرنين والنداء الصوتي التلقائي للمرضى.</p>
+    <button class="btn-primary-cta" style="margin-top: 10px; font-family: Cairo; font-size: 14px; padding: 12px 24px; background: linear-gradient(135deg, #0f766e 0%, #0ea5e9 100%); border: none; border-radius: 30px; color: white; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(14,165,233,0.3);">ابدأ النداء الصوتي</button>
+    <div id="voice-warning-badge" style="display: none; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; padding: 10px 14px; border-radius: 8px; font-size: 12px; margin-top: 15px; text-align: center; max-width: 420px; line-height: 1.5; font-family: Cairo, sans-serif;" onclick="event.stopPropagation()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: #ef4444; display: inline-block; vertical-align: middle; margin-right: 4px; margin-top: -2px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> <strong>تنبيه النظام:</strong> لم يتم العثور على حزمة نطق اللغة العربية في هذا المتصفح/الجهاز. سينطق المتصفح الأرقام فقط بالإنجليزية.<br>
+      <span style="font-size: 11px; opacity: 0.85; margin-top: 4px; display: block;">لحل المشكلة وسماع النداء بالكامل: يرجى تثبيت <strong>حزمة اللغة العربية (Speech Pack)</strong> من إعدادات Windows (Time & Language -> Language -> Preferred Languages -> Add Arabic).</span>
+    </div>
+  </div>
+
+  <div class="tv-container">
+    <!-- Header -->
+    <div class="tv-header">
+      <div class="tv-brand">
+        <div class="tv-logo">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+          </svg>
+        </div>
+        <div>
+          <h1>عيادة النور</h1>
+          <span>طب أسنان عام — د. محمد نور</span>
+        </div>
+      </div>
+      <div class="tv-clock">
+        <div class="tv-clock-time" id="tv-time">--:--</div>
+        <div class="tv-clock-date" id="tv-date">—</div>
+      </div>
+    </div>
+
+    <!-- Current Patient In Exam -->
+    <div class="tv-current" id="tv-current-area">
+      <div class="tv-current-label">المريض الحالي في الكشف</div>
+      <div class="tv-current-number" id="tv-current-num">—</div>
+      <div class="tv-current-name" id="tv-current-name">—</div>
+      <div class="tv-current-doctor" id="tv-current-doctor">—</div>
+      <div class="tv-current-status"><i class="fa-solid fa-stethoscope"></i> جاري الكشف</div>
+    </div>
+
+    <!-- Waiting Queue -->
+    <div class="tv-waiting">
+      <div class="tv-waiting-header">
+        <i class="fa-solid fa-clock"></i> قائمة الانتظار
+        <span style="margin-right:auto; font-size:14px; font-weight:600; color:#64748b;" id="tv-remaining">—</span>
+      </div>
+      <div class="tv-queue-list" id="tv-queue-list">
+        <div class="tv-empty">
+          <i class="fa-solid fa-spinner fa-spin"></i>
+          <p>جاري التحميل...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chime Sound -->
+  <audio id="chime-sound" preload="auto">
+    <source src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=" type="audio/wav">
+  </audio>
+
+  <script>
+    const API_BASE = '';
+    let lastCalledAt = '';
+    let audioActivated = false;
+    let voices = [];
+
+    // Load available speech synthesis voices
+    function loadVoices() {
+      if ('speechSynthesis' in window) {
+        voices = window.speechSynthesis.getVoices();
+        console.log("Loaded voices count:", voices.length);
+        
+        // Show/hide warning badge based on Arabic voice presence
+        const arVoice = getArabicVoice();
+        const warningBadge = document.getElementById('voice-warning-badge');
+        if (warningBadge) {
+          warningBadge.style.display = arVoice ? 'none' : 'block';
+        }
+      }
+    }
+    loadVoices();
+    if ('speechSynthesis' in window && window.speechSynthesis.onvoiceschanged !== undefined) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+
+    // Find a suitable Arabic voice from loaded voices
+    function getArabicVoice() {
+      let arVoice = voices.find(v => v.lang.startsWith('ar-') || v.lang.toLowerCase() === 'ar');
+      if (!arVoice) {
+        arVoice = voices.find(v => v.name.toLowerCase().includes('arabic') || v.name.includes('العربية'));
+      }
+      return arVoice;
+    }
+
+    // Web Audio programmatic chime generator (Ding-Dong sound)
+    function playChimeSound() {
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // Ding (D5)
+        const osc1 = audioCtx.createOscillator();
+        const gain1 = audioCtx.createGain();
+        osc1.connect(gain1);
+        gain1.connect(audioCtx.destination);
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(587.33, audioCtx.currentTime); 
+        gain1.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain1.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.8);
+        osc1.start(audioCtx.currentTime);
+        osc1.stop(audioCtx.currentTime + 0.8);
+        
+        // Dong (A4)
+        const osc2 = audioCtx.createOscillator();
+        const gain2 = audioCtx.createGain();
+        osc2.connect(gain2);
+        gain2.connect(audioCtx.destination);
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(440.00, audioCtx.currentTime + 0.22); 
+        gain2.gain.setValueAtTime(0, audioCtx.currentTime);
+        gain2.gain.setValueAtTime(0.2, audioCtx.currentTime + 0.22);
+        gain2.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1.22);
+        osc2.start(audioCtx.currentTime + 0.22);
+        osc2.stop(audioCtx.currentTime + 1.22);
+      } catch (e) {
+        console.error('AudioContext chime failed:', e);
+      }
+    }
+
+    // Speech Synthesis function with Google TTS public API Cloud voice fallback
+    function speakText(phrase) {
+      const arVoice = getArabicVoice();
+      if (arVoice) {
+        // Use local Arabic voice if installed
+        console.log("Using local Arabic voice:", arVoice.name);
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(phrase);
+          utterance.lang = 'ar-EG';
+          utterance.rate = 0.8;
+          utterance.voice = arVoice;
+          window.speechSynthesis.speak(utterance);
+        }
+      } else {
+        // Fallback to StreamElements public TTS (High-quality cloud Arabic voice: Maged)
+        console.log("No local Arabic voice found. Falling back to StreamElements TTS...");
+        let fallbackAudio = document.getElementById('tts-fallback-audio');
+        if (!fallbackAudio) {
+          fallbackAudio = document.createElement('audio');
+          fallbackAudio.id = 'tts-fallback-audio';
+          document.body.appendChild(fallbackAudio);
+        }
+        
+        // StreamElements public TTS API with Maged Arabic voice
+        const url = `https://api.streamelements.com/kappa/v2/speech?voice=Maged&text=${encodeURIComponent(phrase)}`;
+        fallbackAudio.src = url;
+        
+        fallbackAudio.play().catch(err => {
+          console.error("StreamElements TTS fallback audio playback failed:", err);
+          // Ultimate fallback: try default local voice synthesis anyway
+          if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(phrase);
+            utterance.lang = 'ar-EG';
+            utterance.rate = 0.8;
+            window.speechSynthesis.speak(utterance);
+          }
+        });
+      }
+    }
+
+    // Activate audio on user interaction (bypasses browser autoplay policy)
+    function enableAudioAndAnnounce() {
+      audioActivated = true;
+      document.getElementById('autoplay-banner').style.display = 'none';
+      
+      // Play chime
+      playChimeSound();
+      
+      // Voice confirmation
+      speakText("تم تفعيل الصوت والنداء الآلي بنجاح");
+    }
+
+    // Clock
+    function updateClock() {
+      const now = new Date();
+      let hours = now.getHours();
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const seconds = String(now.getSeconds()).padStart(2, '0');
+      const ampm = hours >= 12 ? 'م' : 'ص';
+      hours = hours % 12;
+      hours = hours ? hours : 12; // the hour '0' should be '12'
+      const hoursStr = String(hours).padStart(2, '0');
+      
+      document.getElementById('tv-time').textContent = `${hoursStr}:${minutes}:${seconds} ${ampm}`;
+      
+      const dayNames = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+      const monthNames = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+      document.getElementById('tv-date').textContent = `${dayNames[now.getDay()]} ${now.getDate()} ${monthNames[now.getMonth()]} ${now.getFullYear()}`;
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // Load Queue
+    async function loadQueue() {
+      try {
+        const res = await fetch(`${API_BASE}/v1/queue/today`).then(r => r.json());
+        if (res.success) {
+          const data = res.data;
+
+          // Current patient
+          if (data.current_in_exam && data.current_in_exam.patient_name) {
+            document.getElementById('tv-current-num').textContent = data.current_in_exam.queue_number;
+            document.getElementById('tv-current-name').textContent = data.current_in_exam.patient_name;
+            document.getElementById('tv-current-doctor').textContent = data.current_in_exam.doctor_name || 'د. محمد نور';
+            document.querySelector('.tv-current-status').style.display = 'inline-block';
+
+            // Flash if new call
+            if (data.last_called_at && data.last_called_at !== lastCalledAt) {
+              const isFirstRun = (lastCalledAt === '');
+              lastCalledAt = data.last_called_at;
+              
+              const currentArea = document.getElementById('tv-current-area');
+              currentArea.classList.add('tv-flash');
+              setTimeout(() => currentArea.classList.remove('tv-flash'), 2000);
+              
+              // Only announce if audio is activated and it's not the initial page load stats load
+              if (audioActivated && !isFirstRun) {
+                // Play programmatic chime
+                playChimeSound();
+                
+                // Arabic Voice Announcement (local or cloud fallback)
+                speakText(`مريض رقم ${data.current_in_exam.queue_number}، أستاذ ${data.current_in_exam.patient_name}، يرجى التوجه لغرفة الكشف.`);
+              }
+            }
+          } else {
+            document.getElementById('tv-current-num').textContent = '—';
+            document.getElementById('tv-current-name').textContent = 'لا يوجد مريض حالياً';
+            document.getElementById('tv-current-doctor').textContent = 'غرفة الكشف شاغرة';
+            document.querySelector('.tv-current-status').style.display = 'none';
+          }
+
+          // Waiting list
+          const listEl = document.getElementById('tv-queue-list');
+          if (data.waiting_list.length === 0) {
+            listEl.innerHTML = '<div class="tv-empty"><i class="fa-solid fa-check-circle" style="color:#10b981;"></i><p>لا يوجد مرضى في الانتظار</p></div>';
+          } else {
+            listEl.innerHTML = data.waiting_list.map(item => `
+              <div class="tv-queue-item" ${item.is_urgent ? 'style="border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.06);"' : ''}>
+                <div class="tv-queue-num" ${item.is_urgent ? 'style="background: rgba(239,68,68,0.15); color: #ef4444;"' : ''}>${item.queue_number}</div>
+                <div style="display: flex; flex-direction: column; gap: 2px;">
+                  <div class="tv-queue-name">${item.patient_name}</div>
+                  ${item.is_urgent ? '<div style="display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: #ef4444; font-weight: 700;"><i class="fa-solid fa-bolt"></i> حالة عاجلة</div>' : ''}
+                </div>
+              </div>
+            `).join('');
+          }
+
+          document.getElementById('tv-remaining').textContent = `${data.waiting_list.length} مريض`;
+        }
+      } catch (e) {
+        console.error('Queue load error:', e);
+      }
+    }
+
+    loadQueue();
+    // Poll every 5 seconds
+    setInterval(loadQueue, 5000);
+  </script>
+</body>
+</html>

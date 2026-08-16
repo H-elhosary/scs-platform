@@ -1,0 +1,116 @@
+/* =============================================
+   SMART CLINIC OS — Utilities
+   Helper classes, text utilities, spacing
+   ============================================= */
+
+/* === Display Utilities === */
+.hidden { display: none !important; }
+.visible { display: block !important; }
+.invisible { visibility: hidden !important; }
+
+.flex { display: flex; }
+.inline-flex { display: inline-flex; }
+.grid { display: grid; }
+
+.flex-col { flex-direction: column; }
+.flex-row { flex-direction: row; }
+.flex-wrap { flex-wrap: wrap; }
+.flex-1 { flex: 1; }
+
+.items-center { align-items: center; }
+.items-start { align-items: flex-start; }
+.items-end { align-items: flex-end; }
+
+.justify-center { justify-content: center; }
+.justify-between { justify-content: space-between; }
+.justify-end { justify-content: flex-end; }
+
+/* === Text Utilities === */
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.text-left { text-align: left; }
+
+.text-bright { color: var(--scs-text-bright); }
+.text-heading { color: var(--scs-text-heading); }
+.text-muted { color: var(--scs-text-muted); }
+.text-primary { color: var(--scs-primary); }
+.text-success { color: var(--scs-success); }
+.text-danger { color: var(--scs-danger); }
+.text-warning { color: var(--scs-warning); }
+.text-info { color: var(--scs-info); }
+
+.font-ar { font-family: var(--scs-font-ar); }
+.font-en { font-family: var(--scs-font-en); }
+.font-mono { font-family: var(--scs-font-mono); }
+
+.font-bold { font-weight: 700; }
+.font-extrabold { font-weight: 800; }
+.font-normal { font-weight: 400; }
+
+.text-xs { font-size: 10px; }
+.text-sm { font-size: 12px; }
+.text-base { font-size: 14px; }
+.text-lg { font-size: 16px; }
+.text-xl { font-size: 20px; }
+.text-2xl { font-size: 24px; }
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.whitespace-nowrap { white-space: nowrap; }
+.whitespace-pre-wrap { white-space: pre-wrap; }
+
+/* === Spacing Utilities === */
+.gap-1 { gap: var(--scs-space-1); }
+.gap-2 { gap: var(--scs-space-2); }
+.gap-3 { gap: var(--scs-space-3); }
+.gap-4 { gap: var(--scs-space-4); }
+.gap-6 { gap: var(--scs-space-6); }
+
+.p-0 { padding: 0; }
+.p-2 { padding: var(--scs-space-2); }
+.p-4 { padding: var(--scs-space-4); }
+.p-6 { padding: var(--scs-space-6); }
+
+.m-0 { margin: 0; }
+.mb-2 { margin-bottom: var(--scs-space-2); }
+.mb-4 { margin-bottom: var(--scs-space-4); }
+.mb-6 { margin-bottom: var(--scs-space-6); }
+.mt-4 { margin-top: var(--scs-space-4); }
+.mt-6 { margin-top: var(--scs-space-6); }
+
+/* === Border Utilities === */
+.rounded-sm { border-radius: var(--scs-radius-sm); }
+.rounded-md { border-radius: var(--scs-radius-md); }
+.rounded-lg { border-radius: var(--scs-radius-lg); }
+.rounded-xl { border-radius: var(--scs-radius-xl); }
+.rounded-full { border-radius: var(--scs-radius-round); }
+
+/* === Width Utilities === */
+.w-full { width: 100%; }
+.max-w-full { max-width: 100%; }
+
+/* === Overflow === */
+.overflow-hidden { overflow: hidden; }
+.overflow-auto { overflow: auto; }
+.overflow-y-auto { overflow-y: auto; }
+
+/* === Cursor === */
+.cursor-pointer { cursor: pointer; }
+.cursor-not-allowed { cursor: not-allowed; }
+
+/* === Opacity === */
+.opacity-50 { opacity: 0.5; }
+.opacity-70 { opacity: 0.7; }
+.opacity-0 { opacity: 0; }
+
+/* === Selection === */
+.select-none { user-select: none; }
+
+/* === Transition === */
+.transition { transition: var(--scs-transition); }
+.transition-fast { transition: var(--scs-transition-fast); }
+.transition-smooth { transition: var(--scs-transition-smooth); }

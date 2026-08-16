@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Clinic OS - بوابة الأوبريشن</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+  <!-- Toast Notifications Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Top Action Bar -->
+  <header class="top-bar">
+    <button id="lang-toggle-btn" class="btn-secondary" aria-label="Toggle Language">
+      <span class="lang-text">English</span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="2" y1="12" x2="22" y2="12"></line>
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+      </svg>
+    </button>
+  </header>
+
+  <main class="login-container">
+
+    <section class="left-panel">
+      <img src="assets/login_illustration.png" alt="Futuristic Smart Clinic" class="bg-image">
+      <div class="glass-overlay">
+        <div class="overlay-content">
+          <span class="badge" data-i18n="badge_text">لوحة تحكم عمليات المنصة</span>
+          <h1 data-i18n="left_title">إدارة عيادات ومنصة SCS</h1>
+          <p data-i18n="left_desc">إدارة العيادات، خطط الاشتراكات، والتحكم بصلاحيات الوصول من لوحة عمليات واحدة.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="right-panel">
+      <div class="form-wrapper">
+
+        <div class="brand">
+          <div class="logo-icon">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+            </svg>
+          </div>
+          <div class="brand-text">
+            <h2>Smart Clinic OS <span class="badge-ops" style="font-size: 10px; background: var(--accent); color: white; padding: 2px 8px; border-radius: 4px; vertical-align: middle;">Ops</span></h2>
+            <span data-i18n="brand_sub">لوحة عمليات المنصة</span>
+          </div>
+        </div>
+
+        <!-- No tabs — operator only -->
+        <nav class="tabs-container" id="auth-tabs" aria-label="Authentication tabs" style="display:none;">
+          <a class="tab-btn active" data-target="operator" href="#">Ops Console</a>
+        </nav>
+
+        <div id="alert-panel" class="alert-box hide">
+          <div class="alert-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+          <div class="alert-msg" id="alert-msg"></div>
+        </div>
+
+        <!-- Stage 1: Login Form -->
+        <div id="login-stage" class="form-stage">
+          <div class="stage-header">
+            <h3 id="stage-title" data-i18n="login_title_operator">تسجيل دخول الأوبريشن</h3>
+            <p id="stage-desc" data-i18n="login_desc_operator">بوابة تشغيل وإدارة منصة عيادتي الذكية (VPN)</p>
+          </div>
+
+          <form id="login-form">
+            <div class="input-group">
+              <label for="email" data-i18n="label_email">البريد الإلكتروني</label>
+              <div class="input-field">
+                <input type="email" id="email" required placeholder="ops@SCS-ops.com" autocomplete="email">
+              </div>
+            </div>
+
+            <div class="input-group">
+              <div class="label-wrapper">
+                <label for="password" data-i18n="label_password">كلمة المرور</label>
+              </div>
+              <div class="input-field">
+                <input type="password" id="password" required placeholder="••••••••••••" autocomplete="current-password">
+              </div>
+            </div>
+
+            <button type="submit" class="btn-primary" id="login-submit-btn">
+              <span class="btn-text" data-i18n="btn_login">تسجيل الدخول</span>
+              <div class="spinner hide"></div>
+            </button>
+          </form>
+        </div>
+
+        <!-- Stage 2: 2FA Verification -->
+        <div id="otp-stage" class="form-stage hide">
+          <div class="stage-header">
+            <h3 data-i18n="otp_title">رمز التحقق الثنائي (2FA)</h3>
+            <p data-i18n="otp_desc">تم إرسال كود التحقق إلى بريدك الإلكتروني. الرجاء إدخال الرمز لتأكيد هويتك.</p>
+          </div>
+
+          <div class="console-otp-alert">
+            <i class="fa-solid fa-circle-info text-info"></i>
+            <span data-i18n="otp_console_notice">تم طباعة الكود (123456) في Console الخادم والـ Browser لتسهيل التجربة.</span>
+          </div>
+
+          <form id="otp-form">
+            <div class="otp-inputs-wrapper">
+              <input type="text" class="otp-digit" maxlength="1" pattern="[0-9]" required aria-label="Digit 1">
+              <input type="text" class="otp-digit" maxlength="1" pattern="[0-9]" required aria-label="Digit 2">
+              <input type="text" class="otp-digit" maxlength="1" pattern="[0-9]" required aria-label="Digit 3">
+              <input type="text" class="otp-digit" maxlength="1" pattern="[0-9]" required aria-label="Digit 4">
+              <input type="text" class="otp-digit" maxlength="1" pattern="[0-9]" required aria-label="Digit 5">
+              <input type="text" class="otp-digit" maxlength="1" pattern="[0-9]" required aria-label="Digit 6">
+            </div>
+
+            <button type="submit" class="btn-primary" id="otp-submit-btn">
+              <span class="btn-text" data-i18n="btn_verify">تأكيد الرمز والدخول</span>
+              <div class="spinner hide"></div>
+            </button>
+
+            <button type="button" class="btn-link" id="otp-back-btn" data-i18n="btn_back">العودة لشاشة الدخول</button>
+          </form>
+        </div>
+
+        <!-- Stage 3: Success Screen (not normally shown — redirects to admin.html) -->
+        <div id="success-stage" class="form-stage hide">
+          <div class="success-header" style="text-align: center;">
+            <div class="success-icon text-success" style="font-size: 48px; margin-bottom: 12px;"><i class="fa-solid fa-circle-check"></i></div>
+            <h3 data-i18n="success_title" style="font-size: 22px; font-weight: 800; color: var(--accent); margin-bottom: 6px;">تم تسجيل الدخول بنجاح!</h3>
+            <p id="success-user-welcome" style="font-size: 13.5px; color: var(--text-muted);"></p>
+          </div>
+          <div id="success-clinic-card" class="hide"></div>
+          <div class="token-details-card" style="margin-bottom: 20px; border: 1px solid var(--input-border); border-radius: 12px; overflow: hidden;">
+            <div class="card-header" style="background: var(--input-bg); padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--input-border);">
+              <span style="color: var(--accent); font-weight: 700; font-size: 11.5px;">● Active Session</span>
+              <span style="color: var(--text-muted); font-size: 11px;">JSON Web Token</span>
+            </div>
+            <div style="position: relative;">
+              <div id="token-display-box" style="padding: 14px; font-family: monospace; font-size: 11px; word-break: break-all; max-height: 100px; overflow-y: auto; background: #090d16; color: #38bdf8; text-align: left;"></div>
+              <button type="button" id="btn-copy-token" class="btn-secondary" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 6px; cursor: pointer;" title="Copy Token">
+                <i class="fa-regular fa-copy" style="font-size: 12px; color: var(--text-muted);"></i>
+              </button>
+            </div>
+          </div>
+          <button type="button" class="btn-secondary" id="logout-btn" data-i18n="btn_logout" style="width: 100%;">تسجيل الخروج</button>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <script src="app.js?v=2"></script>
+</body>
+
+</html>
