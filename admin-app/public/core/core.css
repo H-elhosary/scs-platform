@@ -1,0 +1,18 @@
+/* =============================================
+   SMART CLINIC OS — OPS CONSOLE — Core Bundle
+   Same design system as clinic-app (design-system.css through
+   responsive.css are copied verbatim so both apps share one visual
+   language), plus ops.css layered on top for platform-console-only
+   components (plan/status badges, KPI reports, billing timeline, etc.)
+   and the purple "Ops" accent that distinguishes this console from
+   the clinic dashboard.
+   ============================================= */
+
+@import url('./design-system.css');
+@import url('./layout.css');
+@import url('./components.css');
+@import url('./forms.css');
+@import url('./animations.css');
+@import url('./utilities.css');
+@import url('./responsive.css');
+@import url('./ops.css');

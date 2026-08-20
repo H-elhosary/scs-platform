@@ -224,6 +224,32 @@ function bootstrapSQLiteSchema() {
       timestamp TEXT DEFAULT CURRENT_TIMESTAMP
     )`);
 
+    // 11. In-App Notifications
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      user_id TEXT,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      type TEXT DEFAULT 'info',
+      link TEXT,
+      is_read INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    // 12. Admin Audit Logs
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS admin_audit_logs (
+      id TEXT PRIMARY KEY,
+      admin_id TEXT,
+      action TEXT,
+      target_type TEXT,
+      target_id TEXT,
+      details TEXT,
+      ip_address TEXT,
+      user_agent TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
     // Seed initial data if empty
     seedInitialData();
   });

@@ -226,6 +226,22 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 
 -- ==========================================
+-- INDEXES (tenant_id is filtered on in almost every query; date/doctor_id
+-- and conversation_id are the other hot lookup paths)
+-- ==========================================
+CREATE INDEX IF NOT EXISTS idx_doctors_tenant ON doctors(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_services_tenant ON services(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_patients_tenant ON patients(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_appointments_tenant ON appointments(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_appointments_date_doctor ON appointments(date, doctor_id);
+CREATE INDEX IF NOT EXISTS idx_appointments_patient ON appointments(patient_id);
+CREATE INDEX IF NOT EXISTS idx_medical_records_tenant ON medical_records(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_medical_records_patient ON medical_records(patient_id);
+CREATE INDEX IF NOT EXISTS idx_tickets_tenant ON tickets(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_tenant ON conversations(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
+
+-- ==========================================
 -- SEED INITIAL DATA
 -- ==========================================
 

@@ -38,7 +38,7 @@ function renderPatientsList(patients) {
   tbody.innerHTML = patients.map(p => {
     return `
       <tr class="animate-fade-in">
-        <td><strong>${p.full_name}</strong></td>
+        <td><strong>${escapeHtml(p.full_name)}</strong></td>
         <td><span style="font-family: Outfit; font-weight: 600;">${p.phone}</span></td>
         <td>${p.age || '—'}</td>
         <td>${genderAr[p.gender] || '—'}</td>

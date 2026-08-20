@@ -8,11 +8,13 @@ const ScsApi = (() => {
 
   // Standardized fetch wrapper
   async function request(url, options = {}) {
-    const tenantId = localStorage.getItem('tenant_id') || 'a7b3c2d1-e5f6-7a8b-9c0d-1e2f3a4b5c6d';
+    const tenantId = localStorage.getItem('tenant_id') || '';
+    const token = localStorage.getItem('auth_token') || '';
     const config = {
       headers: {
         'Content-Type': 'application/json',
         'x-tenant-id': tenantId,
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         ...options.headers
       },
       ...options

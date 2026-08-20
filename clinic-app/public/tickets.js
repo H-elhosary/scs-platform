@@ -5,7 +5,7 @@ document.addEventListener('sharedDataReady', () => {
 
 async function loadTickets() {
   try {
-    const res = await fetch(`${API_BASE}/v1/tickets`).then(r => r.json());
+    const res = await authFetch(`${API_BASE}/v1/tickets`).then(r => r.json());
     if (res.success) {
       renderTickets(res.data);
     }
@@ -59,7 +59,7 @@ function renderTickets(tickets) {
 async function submitNewTicket(e) {
   e.preventDefault();
   try {
-    const res = await fetch(`${API_BASE}/v1/tickets`, {
+    const res = await authFetch(`${API_BASE}/v1/tickets`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -86,7 +86,7 @@ async function submitNewTicket(e) {
 
 async function viewTicketDetails(ticketId) {
   try {
-    const res = await fetch(`${API_BASE}/v1/tickets/${ticketId}`).then(r => r.json());
+    const res = await authFetch(`${API_BASE}/v1/tickets/${ticketId}`).then(r => r.json());
     if (res.success) {
       const t = res.data;
       

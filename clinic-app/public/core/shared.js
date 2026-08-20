@@ -1,5 +1,30 @@
 const API_BASE = '';
 
+// Wrapper around fetch() that attaches the logged-in session token and tenant id
+// to every same-origin API call. All clinic dashboard routes now require auth —
+// pages must use this (not raw fetch) so the server can identify the caller.
+function authFetch(url, options = {}) {
+  const tenantId = localStorage.getItem('tenant_id') || '';
+  const token = localStorage.getItem('auth_token') || '';
+  return fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'x-tenant-id': tenantId,
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      ...(options.headers || {})
+    }
+  });
+}
+
+// Escape untrusted text (e.g. patient-supplied names from WhatsApp/Telegram
+// profiles) before interpolating it into innerHTML.
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text == null ? '' : String(text);
+  return div.innerHTML;
+}
+
 // Global shared state
 let allPatients = [];
 let allServices = [];
@@ -13,11 +38,16 @@ let aptSelectedLocation = "";
 // Common Initialization
 document.addEventListener('DOMContentLoaded', async () => {
   injectSidebarAndShell();
+  injectNotificationBell();
   await loadBaseLayoutData();
   await loadGlobalData();
+  await loadInAppNotifications();
   
   // Custom event trigger so page scripts know shared data is ready
   document.dispatchEvent(new CustomEvent('sharedDataReady'));
+
+  // Periodic background check for new notifications
+  setInterval(loadInAppNotifications, 25000);
 });
 
 // 1. Inject Sidebar and Toast Container
@@ -208,10 +238,7 @@ function highlightActiveLink() {
 // 2. Load Base Layout Stats
 async function loadBaseLayoutData() {
   try {
-    const tenantId = localStorage.getItem('tenant_id') || 'a7b3c2d1-e5f6-7a8b-9c0d-1e2f3a4b5c6d';
-    const statsRes = await fetch(`${API_BASE}/v1/dashboard/stats`, {
-      headers: { 'x-tenant-id': tenantId }
-    }).then(r => r.json());
+    const statsRes = await authFetch(`${API_BASE}/v1/dashboard/stats`).then(r => r.json());
 
     if (statsRes.success) {
       const d = statsRes.data;
@@ -261,14 +288,11 @@ async function loadBaseLayoutData() {
 // 3. Load Global resources
 async function loadGlobalData() {
   try {
-    const tenantId = localStorage.getItem('tenant_id') || 'a7b3c2d1-e5f6-7a8b-9c0d-1e2f3a4b5c6d';
-    const reqHeaders = { 'x-tenant-id': tenantId };
-
     const [pRes, sRes, whRes, dRes] = await Promise.all([
-      fetch(`${API_BASE}/v1/patients`, { headers: reqHeaders }).then(r => r.json()),
-      fetch(`${API_BASE}/v1/settings/services`, { headers: reqHeaders }).then(r => r.json()),
-      fetch(`${API_BASE}/v1/settings/working-hours`, { headers: reqHeaders }).then(r => r.json()),
-      fetch(`${API_BASE}/v1/doctors`, { headers: reqHeaders }).then(r => r.json())
+      authFetch(`${API_BASE}/v1/patients`).then(r => r.json()),
+      authFetch(`${API_BASE}/v1/settings/services`).then(r => r.json()),
+      authFetch(`${API_BASE}/v1/settings/working-hours`).then(r => r.json()),
+      authFetch(`${API_BASE}/v1/doctors`).then(r => r.json())
     ]);
     if (pRes.success) allPatients = pRes.data.patients;
     if (sRes.success) allServices = sRes.data;
@@ -317,4 +341,229 @@ function formatDate(date) {
   if (month.length < 2) month = '0' + month;
   if (day.length < 2) day = '0' + day;
   return [year, month, day].join('-');
+}
+
+// =============================================
+// In-App Notification Bell & UI System (Strictly SVG - No Emojis)
+// =============================================
+
+function injectNotificationBell() {
+  if (document.getElementById('notification-bell-container')) return;
+
+  const headerActions = document.querySelector('.view-header-actions') || 
+                        document.querySelector('.top-header-actions') || 
+                        document.querySelector('.view-header');
+
+  if (!headerActions) return;
+
+  const bellWrap = document.createElement('div');
+  bellWrap.id = 'notification-bell-container';
+  bellWrap.className = 'notification-bell-wrapper';
+
+  bellWrap.innerHTML = `
+    <button class="notification-bell-btn" id="notification-bell-btn" onclick="toggleNotificationDropdown(event)" aria-label="الإشعارات" title="الإشعارات">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path>
+        <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>
+      </svg>
+      <span class="notification-badge" id="notification-badge" style="display: none;">0</span>
+    </button>
+
+    <div class="notification-dropdown" id="notification-dropdown">
+      <div class="notification-dropdown-header">
+        <h4 class="notification-dropdown-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path>
+            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>
+          </svg>
+          الإشعارات والتنبيهات
+        </h4>
+        <button class="notification-mark-all-btn" id="notif-mark-all-btn" onclick="markAllNotificationsAsRead(event)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+          تحديد الكل كمقروء
+        </button>
+      </div>
+
+      <div class="notification-dropdown-body" id="notification-dropdown-body">
+        <div class="notification-empty-state">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"></path>
+            <path d="M17 17H3s3-2 3-9a6 6 0 0 1 .4-2"></path>
+            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>
+            <line x1="1" y1="1" x2="23" y2="23"></line>
+          </svg>
+          <div class="notification-empty-title">لا توجد إشعارات جديدة</div>
+          <div class="notification-empty-desc">ستظهر هنا أي تنبيهات أو حجوزات قادمة</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Prepend to header actions so it sits nicely next to the action button
+  headerActions.insertBefore(bellWrap, headerActions.firstChild);
+
+  // Close dropdown on outside click
+  document.addEventListener('click', (e) => {
+    const dropdown = document.getElementById('notification-dropdown');
+    const btn = document.getElementById('notification-bell-btn');
+    if (dropdown && dropdown.classList.contains('active')) {
+      if (!dropdown.contains(e.target) && !btn.contains(e.target)) {
+        dropdown.classList.remove('active');
+      }
+    }
+  });
+}
+
+function toggleNotificationDropdown(e) {
+  if (e) e.stopPropagation();
+  const dropdown = document.getElementById('notification-dropdown');
+  if (!dropdown) return;
+  const isOpen = dropdown.classList.contains('active');
+  if (isOpen) {
+    dropdown.classList.remove('active');
+  } else {
+    dropdown.classList.add('active');
+    loadInAppNotifications();
+  }
+}
+
+// Pure SVG Icon Provider for Notification Types (Strictly NO Emojis)
+function getNotificationSvgIcon(type = 'info') {
+  switch (type) {
+    case 'booking':
+      return `
+        <div class="notification-icon-box booking">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="16" y1="2" x2="16" y2="6"></line>
+            <line x1="8" y1="2" x2="8" y2="6"></line>
+            <line x1="3" y1="10" x2="21" y2="10"></line>
+            <path d="m9 16 2 2 4-4"></path>
+          </svg>
+        </div>
+      `;
+    case 'success':
+      return `
+        <div class="notification-icon-box success">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+        </div>
+      `;
+    case 'warning':
+      return `
+        <div class="notification-icon-box warning">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+        </div>
+      `;
+    case 'info':
+    default:
+      return `
+        <div class="notification-icon-box info">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="16" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+          </svg>
+        </div>
+      `;
+  }
+}
+
+async function loadInAppNotifications() {
+  try {
+    const res = await authFetch(`${API_BASE}/v1/notifications`).then(r => r.json());
+    if (!res.success) return;
+
+    const notifications = res.data.notifications || [];
+    const unreadCount = res.data.unread_count || 0;
+
+    // Update Badge
+    const badge = document.getElementById('notification-badge');
+    if (badge) {
+      if (unreadCount > 0) {
+        badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+        badge.style.display = 'flex';
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+
+    // Render Dropdown List
+    const bodyEl = document.getElementById('notification-dropdown-body');
+    if (!bodyEl) return;
+
+    if (notifications.length === 0) {
+      bodyEl.innerHTML = `
+        <div class="notification-empty-state">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"></path>
+            <path d="M17 17H3s3-2 3-9a6 6 0 0 1 .4-2"></path>
+            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>
+            <line x1="1" y1="1" x2="23" y2="23"></line>
+          </svg>
+          <div class="notification-empty-title">لا توجد إشعارات جديدة</div>
+          <div class="notification-empty-desc">ستظهر هنا أي تنبيهات أو حجوزات قادمة</div>
+        </div>
+      `;
+      return;
+    }
+
+    bodyEl.innerHTML = notifications.map(n => {
+      const isUnread = !n.is_read;
+      const iconSvg = getNotificationSvgIcon(n.type);
+      const timeStr = n.created_at ? new Date(n.created_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : '';
+      const dateStr = n.created_at ? new Date(n.created_at).toLocaleDateString('ar-EG') : '';
+
+      return `
+        <div class="notification-item ${isUnread ? 'unread' : ''}" onclick="handleNotificationClick('${n.id}', '${n.link || ''}')">
+          ${iconSvg}
+          <div class="notification-content">
+            <div class="notification-item-title">${escapeHtml(n.title)}</div>
+            <div class="notification-item-msg">${escapeHtml(n.message)}</div>
+            <div class="notification-item-time">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+              <span>${dateStr} - ${timeStr}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+  } catch (err) {
+    console.warn('Failed to load in-app notifications:', err);
+  }
+}
+
+async function handleNotificationClick(id, link) {
+  try {
+    await authFetch(`${API_BASE}/v1/notifications/${id}/read`, { method: 'PUT' });
+    await loadInAppNotifications();
+    if (link && link !== 'null' && link !== '') {
+      window.location.href = link;
+    }
+  } catch (err) {
+    console.error('Error marking notification as read:', err);
+  }
+}
+
+async function markAllNotificationsAsRead(e) {
+  if (e) e.stopPropagation();
+  try {
+    await authFetch(`${API_BASE}/v1/notifications/read-all`, { method: 'PUT' });
+    await loadInAppNotifications();
+    showToast('تم تحديد جميع الإشعارات كمقروءة', 'success');
+  } catch (err) {
+    console.error('Error marking all notifications read:', err);
+  }
 }

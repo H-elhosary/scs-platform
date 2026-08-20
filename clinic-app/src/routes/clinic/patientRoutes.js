@@ -10,6 +10,16 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../../db/connection');
+const { decrypt } = require('../../utils/crypto');
+
+// decrypt() safely passes through any pre-existing plaintext rows unchanged,
+// so this is safe to apply uniformly regardless of when a record was written.
+const decryptRecord = (rec) => ({
+  ...rec,
+  subjective: decrypt(rec.subjective),
+  diagnosis_icd11: decrypt(rec.diagnosis_icd11),
+  plan: decrypt(rec.plan)
+});
 
 // --- List Patients (with search, tag filter, pagination) ---
 router.get('/v1/patients', async (req, res) => {
@@ -84,7 +94,7 @@ router.get('/v1/patients/:id', async (req, res) => {
 
     return res.json({
       success: true,
-      data: { patient, appointments, medical_records: records }
+      data: { patient, appointments, medical_records: records.map(decryptRecord) }
     });
   } catch (err) {
     console.error('Failed to get patient profile:', err);
@@ -160,7 +170,7 @@ router.put('/v1/patients/:id', async (req, res) => {
 router.get('/v1/patients/:id/medical-records', async (req, res) => {
   try {
     const records = await db.all(`SELECT * FROM medical_records WHERE patient_id = ? ORDER BY created_at DESC`, [req.params.id]);
-    return res.json({ success: true, data: records });
+    return res.json({ success: true, data: records.map(decryptRecord) });
   } catch (err) {
     return res.status(500).json({ success: false, error: { message: 'حدث خطأ أثناء جلب السجلات' } });
   }

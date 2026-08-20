@@ -9,7 +9,7 @@ services:
     environment:
       POSTGRES_DB: scs_db
       POSTGRES_USER: scs_user
-      POSTGRES_PASSWORD: SecureDbPassword123!
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
@@ -47,14 +47,19 @@ services:
       - "3000:3000"
     environment:
       - PORT=3000
+      - NODE_ENV=production
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=scs_db
       - DB_USER=scs_user
-      - DB_PASSWORD=SecureDbPassword123!
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - MEDICAL_ENCRYPTION_KEY=a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6
+      - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+      - JWT_ACCESS_EXPIRY=${JWT_ACCESS_EXPIRY:-15m}
+      - JWT_REFRESH_EXPIRY=${JWT_REFRESH_EXPIRY:-7d}
+      - MEDICAL_ENCRYPTION_KEY=${MEDICAL_ENCRYPTION_KEY}
     depends_on:
       postgres:
         condition: service_healthy

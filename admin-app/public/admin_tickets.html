@@ -3,188 +3,103 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smart Clinic OS - الطلبات والشكاوى الواردة</title>
+  <title>الطلبات والشكاوى — لوحة عمليات المنصة</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="core/core.css">
 </head>
-<body class="dashboard-body">
+<body class="clinic-body">
+  <div class="clinic-layout">
+    <main class="clinic-main">
 
-  <!-- Toast Notifications Container -->
-  <div id="toast-container" class="toast-container"></div>
-
-  <!-- Admin Dashboard Layout -->
-  <div class="dashboard-container">
-    
-    <!-- Top Nav Header -->
-    <header class="dash-header">
-      <div class="header-left">
-        <div class="brand">
-          <div class="logo-icon small">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
-            </svg>
-          </div>
-          <h2>Smart Clinic OS <span class="badge-ops">Ops Console</span></h2>
+      <div class="view-header">
+        <div>
+          <h1><i class="fa-solid fa-clipboard-list"></i> إدارة الطلبات والشكاوى الواردة</h1>
+          <p class="view-subtitle">مراجعة طلبات التجديد والترقية والدعم الفني والشكاوى المقدمة من العيادات، واتخاذ إجراء بشأنها.</p>
         </div>
+        <div class="view-header-actions"></div>
       </div>
-      <nav class="ops-main-tabs">
-        <a id="tab-btn-home" class="ops-tab-btn" href="admin.html"><i class="fa-solid fa-chart-line"></i>الرئيسية</a>
-        <a id="tab-btn-clinics" class="ops-tab-btn" href="admin_clinics.html"><i class="fa-solid fa-hospital"></i>إدارة العيادات</a>
-        <a id="tab-btn-plans" class="ops-tab-btn" href="admin_plans.html"><i class="fa-solid fa-gem"></i>إدارة الباقات</a>
-        <a id="tab-btn-tickets" class="ops-tab-btn active" href="admin_tickets.html"><i class="fa-solid fa-clipboard-list"></i>الطلبات والشكاوى</a>
-      </nav>
 
-      <div class="header-actions">
-        <!-- Language Selector -->
-        <button id="lang-toggle-btn" class="btn-secondary" aria-label="Toggle Language" style="display:none;">
-          <span class="lang-text">English</span>
-        </button>
-        <!-- Logged-in Operator User -->
-        <div class="user-profile-badge">
-          <div class="avatar"><i class="fa-solid fa-user-gear"></i></div>
-          <div class="profile-info">
-            <span class="profile-name" id="operator-name">مشغل النظام</span>
-            <span class="profile-role" id="operator-role">Super Admin</span>
+      <div id="alert-panel" class="alert-box hide"><div class="alert-icon"><i class="fa-solid fa-triangle-exclamation"></i></div><div class="alert-msg" id="alert-msg"></div></div>
+
+      <section class="table-card">
+        <div class="table-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; padding:18px 20px; border-bottom:1px solid var(--scs-border);">
+          <h3 style="margin:0; font-size:15px; font-weight:700; color:var(--scs-text-heading);">سجل التذاكر والطلبات العامة</h3>
+          <div style="display:flex; gap:10px;">
+            <select id="filter-ticket-status" class="form-input" style="width:auto; cursor:pointer;" onchange="filterTickets()">
+              <option value="all">كل الحالات</option>
+              <option value="pending">قيد الانتظار</option>
+              <option value="processing">جاري المعالجة</option>
+              <option value="resolved">مكتمل ومحلول</option>
+              <option value="rejected">مرفوض</option>
+            </select>
+            <select id="filter-ticket-type" class="form-input" style="width:auto; cursor:pointer;" onchange="filterTickets()">
+              <option value="all">كل أنواع الطلبات</option>
+              <option value="renew">تجديد الاشتراك</option>
+              <option value="upgrade">ترقية الباقة</option>
+              <option value="maintenance">صيانة ودعم فني</option>
+              <option value="complaint">شكوى أو اقتراح</option>
+            </select>
           </div>
         </div>
-        <!-- Logout Button -->
-        <button id="logout-btn" class="btn-danger-icon" title="تسجيل الخروج" aria-label="Logout" onclick="logoutAdmin()">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-        </button>
-      </div>
-    </header>
-
-    <!-- Main Workspace Content -->
-    <main class="dash-content">
-      
-      <!-- Alert Panel -->
-      <div id="alert-panel" class="alert-box hide" style="margin-bottom: 24px;">
-        <div class="alert-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
-        <div class="alert-msg" id="alert-msg"></div>
-      </div>
-
-      <!-- Tab Panel: الطلبات والتذاكر -->
-      <div id="ops-panel-tickets" class="ops-tab-panel active">
-        <div class="content-header">
-          <div>
-            <h1>إدارة الطلبات والشكاوى الواردة</h1>
-            <p>مراجعة طلبات التجديد، طلبات الترقية، الدعم الفني، والشكاوى والمقترحات المقدمة من العيادات واتخاذ إجراءات بشأنها.</p>
-          </div>
+        <div class="table-responsive">
+          <table class="clinic-table">
+            <thead><tr><th>رقم الطلب</th><th>العيادة</th><th>نوع الطلب</th><th>عنوان الطلب</th><th>تاريخ التقديم</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
+            <tbody id="admin-tickets-table-body"><tr><td colspan="7" class="text-center" style="padding:24px; color:var(--scs-text-muted);">جاري تحميل الطلبات...</td></tr></tbody>
+          </table>
         </div>
-
-        <section class="table-card">
-          <div class="table-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
-            <h3>سجل التذاكر والطلبات العامة</h3>
-            
-            <!-- Filters -->
-            <div class="table-controls" style="display: flex; gap: 10px; align-items: center;">
-              <select id="filter-ticket-status" onchange="filterTickets()" style="padding: 8px 12px; font-size: 13px; border-radius: 8px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-main); outline: none; font-family: 'Cairo', sans-serif; cursor: pointer;">
-                <option value="all">كل الحالات</option>
-                <option value="pending">قيد الانتظار</option>
-                <option value="processing">جاري المعالجة</option>
-                <option value="resolved">مكتمل ومحلول</option>
-                <option value="rejected">مرفوض</option>
-              </select>
-
-              <select id="filter-ticket-type" onchange="filterTickets()" style="padding: 8px 12px; font-size: 13px; border-radius: 8px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-main); outline: none; font-family: 'Cairo', sans-serif; cursor: pointer;">
-                <option value="all">كل أنواع الطلبات</option>
-                <option value="renew">تجديد الاشتراك</option>
-                <option value="upgrade">ترقية الباقة</option>
-                <option value="maintenance">صيانة ودعم فني</option>
-                <option value="complaint">شكوى أو اقتراح</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="table-responsive">
-            <table class="ops-table" style="width:100%; border-collapse:collapse;">
-              <thead>
-                <tr>
-                  <th style="text-align:right; padding:12px 16px;">رقم الطلب</th>
-                  <th style="text-align:right; padding:12px 16px;">العيادة</th>
-                  <th style="text-align:right; padding:12px 16px;">نوع الطلب</th>
-                  <th style="text-align:right; padding:12px 16px;">عنوان الطلب</th>
-                  <th style="text-align:right; padding:12px 16px;">تاريخ التقديم</th>
-                  <th style="text-align:right; padding:12px 16px;">الحالة</th>
-                  <th style="text-align:right; padding:12px 16px;">الإجراءات</th>
-                </tr>
-              </thead>
-              <tbody id="admin-tickets-table-body">
-                <tr><td colspan="7" class="loading-text" style="text-align:center; padding:24px;">جاري تحميل الطلبات...</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
+      </section>
 
     </main>
   </div>
 
-  <!-- Modal: Respond / Update Ticket -->
-  <div id="respond-ticket-modal" class="modal-overlay hide">
-    <div class="modal-card">
+  <!-- Modal: Respond to Ticket -->
+  <div id="respond-ticket-modal" class="modal-overlay">
+    <div class="modal-content">
       <div class="modal-header">
-        <h3 class="modal-title-with-icon">
-          <i class="fa-solid fa-reply text-cyan"></i>
-          <span>الرد على طلب العيادة وتحديث حالته</span>
-        </h3>
-        <button class="modal-close" onclick="closeRespondModal()">&times;</button>
+        <h3><i class="fa-solid fa-reply" style="color:var(--primary);"></i> الرد على طلب العيادة وتحديث حالته</h3>
+        <button class="modal-close" onclick="closeModal('respond-ticket-modal')">&times;</button>
       </div>
       <form id="respond-ticket-form" onsubmit="submitTicketResponse(event)">
         <div class="modal-body">
-          <div style="display:flex; flex-direction:column; gap:16px; margin-bottom:16px; background:rgba(255,255,255,0.01); border:1px solid rgba(255,255,255,0.03); padding:16px; border-radius:10px;">
-            <div style="display:flex; justify-content:space-between;">
-              <span style="font-size:12px; color:var(--text-muted);">رقم التذكرة: <strong id="modal-tkt-id" style="color:var(--text-main);">TKT-0000</strong></span>
-              <span style="font-size:12px; color:var(--text-muted);">العيادة: <strong id="modal-tkt-clinic" style="color:var(--text-main);">-</strong></span>
+          <div style="display:flex; flex-direction:column; gap:14px; margin-bottom:16px; background:var(--scs-bg-hover); border:1px solid var(--scs-border); padding:16px; border-radius:var(--scs-radius-md);">
+            <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--scs-text-muted);">
+              <span>رقم التذكرة: <strong id="modal-tkt-id" style="color:var(--scs-text-heading);">TKT-0000</strong></span>
+              <span>العيادة: <strong id="modal-tkt-clinic" style="color:var(--scs-text-heading);">-</strong></span>
             </div>
+            <div><span style="font-size:12px; color:var(--scs-text-muted); display:block; margin-bottom:4px;">نوع الطلب:</span><span id="modal-tkt-type" class="tag-pill">-</span></div>
+            <div><span style="font-size:12px; color:var(--scs-text-muted); display:block; margin-bottom:4px;">عنوان الطلب:</span><span id="modal-tkt-title" style="font-weight:700; color:var(--scs-text-heading);">-</span></div>
             <div>
-              <span style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">نوع الطلب:</span>
-              <span id="modal-tkt-type" class="tag-pill" style="display:inline-block;">-</span>
-            </div>
-            <div>
-              <span style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">عنوان الطلب:</span>
-              <span id="modal-tkt-title" style="font-weight:700; color:var(--text-main);">-</span>
-            </div>
-            <div>
-              <span style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">الوصف التفصيلي:</span>
-              <p id="modal-tkt-desc" style="font-size:13px; color:var(--text-muted); line-height:1.6; background:rgba(0,0,0,0.2); padding:12px; border-radius:8px; margin:0; white-space:pre-wrap;"></p>
+              <span style="font-size:12px; color:var(--scs-text-muted); display:block; margin-bottom:4px;">الوصف التفصيلي:</span>
+              <p id="modal-tkt-desc" style="font-size:13px; color:var(--scs-text-label); line-height:1.6; background:var(--scs-bg-card); border:1px solid var(--scs-border); padding:12px; border-radius:var(--scs-radius-md); margin:0; white-space:pre-wrap;"></p>
             </div>
           </div>
 
-          <!-- Update Controls -->
-          <div class="input-grid">
-            <div class="input-group">
-              <label for="update-tkt-status">تعديل حالة الطلب *</label>
-              <div class="input-field">
-                <select id="update-tkt-status" required style="font-family: 'Cairo';">
-                  <option value="pending">قيد الانتظار</option>
-                  <option value="processing">جاري المعالجة</option>
-                  <option value="resolved">مكتمل ومحلول</option>
-                  <option value="rejected">مرفوض</option>
-                </select>
-              </div>
-            </div>
+          <div class="form-group" style="margin-bottom:14px;">
+            <label for="update-tkt-status">تعديل حالة الطلب *</label>
+            <select id="update-tkt-status" required>
+              <option value="pending">قيد الانتظار</option>
+              <option value="processing">جاري المعالجة</option>
+              <option value="resolved">مكتمل ومحلول</option>
+              <option value="rejected">مرفوض</option>
+            </select>
           </div>
-
-          <div class="input-group" style="margin-top: 12px;">
+          <div class="form-group">
             <label for="update-tkt-notes">الرد والملحوظات للعيادة *</label>
-            <textarea id="update-tkt-notes" required placeholder="اكتب رد الإدارة أو الخطوات المتبعة هنا..." rows="4" style="width:100%; background:var(--input-bg); border:1px solid var(--input-border); border-radius:8px; color:var(--text-main); padding:12px; font-family:Cairo; font-size:13px; resize:vertical; outline:none;"></textarea>
+            <textarea id="update-tkt-notes" required placeholder="اكتب رد الإدارة أو الخطوات المتبعة هنا..." rows="4" style="resize:vertical;"></textarea>
           </div>
-
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn-secondary" onclick="closeRespondModal()">إلغاء</button>
-          <button type="submit" class="btn-primary" id="respond-submit-btn">
-            <span>تحديث الطلب وإرسال الرد</span>
-          </button>
+          <button type="button" class="btn-secondary-cta" onclick="closeModal('respond-ticket-modal')">إلغاء</button>
+          <button type="submit" class="btn-primary" id="respond-submit-btn">تحديث الطلب وإرسال الرد</button>
         </div>
       </form>
     </div>
   </div>
 
+  <script src="core/ops-shared.js"></script>
   <script src="admin_tickets.js"></script>
 </body>
 </html>

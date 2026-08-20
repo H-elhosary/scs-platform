@@ -1,11 +1,39 @@
 // Settings Page Specific Logic
 let isEditingWorkingHours = false;
-let settingsSelectedDoctorId = "doc-uuid-noor-1";
+let settingsSelectedDoctorId = ""; // corrected to the tenant's real first doctor once allDoctors loads
 let clinicBranches = [];
 
 document.addEventListener('sharedDataReady', () => {
   initSettings();
 });
+
+// Files a real upgrade ticket through the existing support-ticket system
+// instead of just telling the doctor to go find an admin themselves.
+async function requestFeatureUpgrade(featureLabel, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'جاري الإرسال...'; }
+  try {
+    const res = await authFetch(`${API_BASE}/v1/tickets`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'upgrade',
+        title: `طلب ترقية الباقة لتفعيل: ${featureLabel}`,
+        description: `طلب مُرسل تلقائياً من صفحة الإعدادات لتفعيل ميزة "${featureLabel}" غير المتاحة في الباقة الحالية.`
+      })
+    }).then(r => r.json());
+
+    if (res.success) {
+      showToast('تم إرسال طلب الترقية بنجاح، وسيتواصل معك فريق الدعم قريباً', 'success');
+      if (btn) btn.textContent = 'تم إرسال الطلب ✓';
+    } else {
+      showToast(res.error?.message || 'فشل إرسال طلب الترقية', 'error');
+      if (btn) { btn.disabled = false; btn.textContent = 'طلب ترقية الباقة'; }
+    }
+  } catch (e) {
+    showToast('تعذر الاتصال بالخادم — حاول مرة أخرى', 'error');
+    if (btn) { btn.disabled = false; btn.textContent = 'طلب ترقية الباقة'; }
+  }
+}
 
 async function initSettings() {
   // Load branches first
@@ -151,7 +179,7 @@ async function submitServiceForm(e) {
   const method = id ? 'PUT' : 'POST';
 
   try {
-    const res = await fetch(url, {
+    const res = await authFetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, name_en, price, duration_minutes, category })
@@ -162,7 +190,7 @@ async function submitServiceForm(e) {
       closeModal('modal-service');
       
       // Reload services globally
-      const sRes = await fetch(`${API_BASE}/v1/settings/services`).then(r => r.json());
+      const sRes = await authFetch(`${API_BASE}/v1/settings/services`).then(r => r.json());
       if (sRes.success) {
         allServices = sRes.data;
         renderServices();
@@ -174,7 +202,7 @@ async function submitServiceForm(e) {
 async function deleteService(id) {
   if (!confirm('هل أنت متأكد من حذف هذه الخدمة؟ قد يؤثر ذلك على حجز المواعيد المرتبطة بها.')) return;
   try {
-    const res = await fetch(`${API_BASE}/v1/settings/services/${id}`, { method: 'DELETE' }).then(r => r.json());
+    const res = await authFetch(`${API_BASE}/v1/settings/services/${id}`, { method: 'DELETE' }).then(r => r.json());
     if (res.success) {
       showToast('تم حذف الخدمة بنجاح', 'info');
       allServices = allServices.filter(s => s.id !== id);
@@ -211,7 +239,7 @@ function showAddDoctorModal() {
 async function submitNewDoctor(e) {
   e.preventDefault();
   try {
-    const res = await fetch(`${API_BASE}/v1/doctors`, {
+    const res = await authFetch(`${API_BASE}/v1/doctors`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -224,7 +252,7 @@ async function submitNewDoctor(e) {
       showToast('تم إضافة الطبيب بنجاح', 'success');
       closeModal('modal-add-doctor');
       
-      const dRes = await fetch(`${API_BASE}/v1/doctors`).then(r => r.json());
+      const dRes = await authFetch(`${API_BASE}/v1/doctors`).then(r => r.json());
       if (dRes.success) {
         allDoctors = dRes.data;
         renderDoctorsList();
@@ -243,7 +271,7 @@ async function submitNewDoctor(e) {
 // 3. Operational Settings
 async function loadOperationalSettings() {
   try {
-    const res = await fetch(`${API_BASE}/v1/settings/operational`).then(r => r.json());
+    const res = await authFetch(`${API_BASE}/v1/settings/operational`).then(r => r.json());
     if (res.success) {
       const d = res.data;
       document.getElementById('op-cancel-window').value = d.cancellation_window_hours;
@@ -257,7 +285,7 @@ async function loadOperationalSettings() {
 
 async function saveOperationalSettings() {
   try {
-    const res = await fetch(`${API_BASE}/v1/settings/operational`, {
+    const res = await authFetch(`${API_BASE}/v1/settings/operational`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -275,7 +303,7 @@ async function saveOperationalSettings() {
 // 4. Notification Settings
 async function loadNotificationSettings() {
   try {
-    const res = await fetch(`${API_BASE}/v1/settings/notifications`).then(r => r.json());
+    const res = await authFetch(`${API_BASE}/v1/settings/notifications`).then(r => r.json());
     if (res.success) {
       const d = res.data;
       document.getElementById('notif-patient-email-confirm').checked = d.patient_email_confirmation;
@@ -292,7 +320,7 @@ async function loadNotificationSettings() {
 
 async function saveNotificationSettings() {
   try {
-    const res = await fetch(`${API_BASE}/v1/settings/notifications`, {
+    const res = await authFetch(`${API_BASE}/v1/settings/notifications`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -313,7 +341,7 @@ async function saveNotificationSettings() {
 // 5. Prescription Settings
 async function loadPrescriptionSettings() {
   try {
-    const res = await fetch(`${API_BASE}/v1/settings/prescription`).then(r => r.json());
+    const res = await authFetch(`${API_BASE}/v1/settings/prescription`).then(r => r.json());
     if (res.success) {
       const d = res.data;
       document.getElementById('rx-setting-header-ar').value = d.header_ar;
@@ -331,7 +359,7 @@ async function loadPrescriptionSettings() {
 
 async function savePrescriptionSettings() {
   try {
-    const res = await fetch(`${API_BASE}/v1/settings/prescription`, {
+    const res = await authFetch(`${API_BASE}/v1/settings/prescription`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -363,7 +391,7 @@ async function renderInsuranceList() {
   if (!tbody) return;
 
   try {
-    const res = await fetch(`${API_BASE}/v1/settings/insurance`).then(r => r.json());
+    const res = await authFetch(`${API_BASE}/v1/settings/insurance`).then(r => r.json());
     if (res.success) {
       if (!res.data.length) {
         tbody.innerHTML = '<tr><td colspan="3" class="loading-cell">لا توجد جهات تأمين متعاقد معها</td></tr>';
@@ -385,7 +413,7 @@ async function renderInsuranceList() {
 async function addInsuranceCompany(e) {
   e.preventDefault();
   try {
-    const res = await fetch(`${API_BASE}/v1/settings/insurance`, {
+    const res = await authFetch(`${API_BASE}/v1/settings/insurance`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -407,7 +435,7 @@ async function addInsuranceCompany(e) {
 // 7. Refund Settings
 async function loadRefundSettings() {
   try {
-    const res = await fetch(`${API_BASE}/v1/settings/refund`).then(r => r.json());
+    const res = await authFetch(`${API_BASE}/v1/settings/refund`).then(r => r.json());
     if (res.success) {
       document.getElementById('op-refund-destination').value = res.data.refund_destination;
     }
@@ -416,7 +444,7 @@ async function loadRefundSettings() {
 
 async function saveRefundSettings() {
   try {
-    const res = await fetch(`${API_BASE}/v1/settings/refund`, {
+    const res = await authFetch(`${API_BASE}/v1/settings/refund`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -431,7 +459,7 @@ async function saveRefundSettings() {
 
 async function fetchDoctorWorkingHours() {
   try {
-    const res = await fetch(`${API_BASE}/v1/settings/working-hours?doctor_id=${settingsSelectedDoctorId}`).then(r => r.json());
+    const res = await authFetch(`${API_BASE}/v1/settings/working-hours?doctor_id=${settingsSelectedDoctorId}`).then(r => r.json());
     if (res.success) {
       workingHoursData = res.data;
     }
@@ -703,7 +731,7 @@ async function saveWorkingHours() {
   if (validationFailed) return;
   
   try {
-    const res = await fetch(`${API_BASE}/v1/settings/working-hours?doctor_id=${settingsSelectedDoctorId}`, {
+    const res = await authFetch(`${API_BASE}/v1/settings/working-hours?doctor_id=${settingsSelectedDoctorId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ working_hours })
@@ -807,7 +835,7 @@ function deleteBranch(name) {
 
 async function loadChannelSettings() {
   try {
-    const res = await fetch(`${API_BASE}/v1/settings/channels`).then(r => r.json());
+    const res = await authFetch(`${API_BASE}/v1/settings/channels`).then(r => r.json());
     if (res.success) {
       const d = res.data;
       
@@ -843,7 +871,7 @@ async function saveDoctorChannelSettings() {
       bot_greeting: document.getElementById('ch-bot-greeting').value.trim()
     };
 
-    const res = await fetch(`${API_BASE}/v1/settings/channels/doctor`, {
+    const res = await authFetch(`${API_BASE}/v1/settings/channels/doctor`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)

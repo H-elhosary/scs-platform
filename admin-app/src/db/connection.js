@@ -1,10 +1,22 @@
+// =============================================
+// Smart Clinic OS (Admin/Ops) — Database Connection Layer
+// Connected directly to the Real SQLite Database (scs_database.sqlite)
+// and PostgreSQL if configured in .env
+// =============================================
+
+const path = require('path');
+const sqlite3 = require('sqlite3').verbose();
 const { Pool } = require('pg');
 require('dotenv').config();
 
-let pool = null;
+let dbType = 'sqlite'; // 'postgres' or 'sqlite'
+let pgPool = null;
+let sqliteDb = null;
 let isMock = false;
 
-// Mock database (In-memory fallback for admin ops)
+// Shared SQLite database path with clinic-app
+const sqliteDbPath = path.resolve(__dirname, '../../../clinic-app/src/db/scs_database.sqlite');
+
 const memoryDB = {
   admin_users: [
     {
@@ -14,9 +26,24 @@ const memoryDB = {
       full_name: "أحمد مشغل النظام",
       role: "super_admin",
       status: "active"
+    },
+    {
+      id: "admin-uuid-hazem",
+      email: "hazemelhosary3@gmail.com",
+      password_hash: "$2a$10$FA.b3tjWz0KQKGNlm.RGxu7gGb9FJcFC4AW/LKpPpH8uUE1w2.Ye6", // "SecurePassword123!"
+      full_name: "د. حازم الحصري",
+      role: "super_admin",
+      status: "active"
+    },
+    {
+      id: "admin-uuid-test",
+      email: "test12316193@gmail.com",
+      password_hash: "$2a$10$FA.b3tjWz0KQKGNlm.RGxu7gGb9FJcFC4AW/LKpPpH8uUE1w2.Ye6", // "SecurePassword123!"
+      full_name: "د. حازم (حساب تجريبي)",
+      role: "super_admin",
+      status: "active"
     }
   ],
-  admin_sessions: [],
   plans: [
     {
       id: "basic", name: "Basic", price_egp: 2500, price_usd: 50,
@@ -37,105 +64,181 @@ const memoryDB = {
       allow_voice_bot: true, allow_custom_branding: true
     }
   ],
-  tenants: [
-    {
-      id: "tenant-uuid-noor",
-      name: "عيادة النور لطب الأسنان",
-      slug: "dr-mohamed-noor",
-      status: "active",
-      subscription_plan: "pro",
-      specialty: "dental",
-      allow_multi_doctor: true,
-      allow_insurance: false,
-      allow_refunds: false,
-      expires_at: "2027-07-01T20:00:00Z",
-      owner_name: "د. محمد نور",
-      owner_email: "clinic_info@noor.com",
-      owner_phone: "+201012345678"
-    },
-    {
-      id: "tenant-uuid-ahmed",
-      name: "عيادة د. أحمد التجميلية",
-      slug: "dr-ahmed-derma",
-      status: "active",
-      subscription_plan: "enterprise",
-      specialty: "dermatology",
-      allow_multi_doctor: true,
-      allow_insurance: true,
-      allow_refunds: true,
-      expires_at: "2026-05-01T00:00:00Z",
-      owner_name: "د. أحمد التجميلي",
-      owner_email: "dr.ahmed@derma.com",
-      owner_phone: "+201211112222"
-    }
-  ],
-  roles: [],
-  users: [],
-  patients: [],
-  appointments: [],
   admin_sessions: [],
   subscription_history: [],
   admin_audit_logs: [],
-  doctors: [
-    { id: "doc-1", tenant_id: "tenant-uuid-noor", full_name: "د. محمد نور", specialty: "أسنان عام" },
-    { id: "doc-2", tenant_id: "tenant-uuid-noor", full_name: "د. ليلى أحمد", specialty: "تقويم أسنان" }
-  ],
-  tickets: [
-    {
-      id: "TKT-1001", tenant_id: "tenant-uuid-noor", tenant_name: "عيادة د. نور لطب الأسنان",
-      type: "upgrade", type_ar: "ترقية الباقة",
-      title: "طلب ترقية لباقة المؤسسات لتفعيل التأمين الطبي",
-      description: "نريد ترقية اشتراكنا الحالي إلى باقة المؤسسات (Enterprise) لتمكين ميزات التأمين الطبي والاسترداد الإلكتروني للمرضى.",
-      status: "pending", created_at: "2026-07-04T12:00:00Z", response_notes: ""
-    },
-    {
-      id: "TKT-1002", tenant_id: "tenant-uuid-noor", tenant_name: "عيادة د. نور لطب الأسنان",
-      type: "maintenance", type_ar: "طلب صيانة",
-      title: "مشكلة في تحميل بعض التقارير المالية",
-      description: "التقرير المالي الأسبوعي لم يظهر مساء الجمعة الماضي. يرجى التحقق.",
-      status: "resolved", created_at: "2026-07-03T09:30:00Z",
-      response_notes: "تم فحص المشكلة في خادم التحليلات وإعادة إرسال التقرير يدوياً. يجب أن يعمل بشكل سليم الآن."
-    }
-  ]
+  tenants: [],
+  users: [],
+  doctors: [],
+  tickets: [],
+  patients: [],
+  appointments: []
 };
 
-// Check if PostgreSQL configurations are set in .env
-const hasPostgresConfig = process.env.DB_HOST && process.env.DB_USER && process.env.DB_PASSWORD && process.env.DB_NAME;
+function initDatabase() {
+  const hasPostgresConfig = process.env.DB_HOST && process.env.DB_USER && process.env.DB_PASSWORD && process.env.DB_NAME;
 
-if (hasPostgresConfig) {
-  pool = new Pool({
-    host: process.env.DB_HOST,
-    port: process.env.DB_PORT || 5432,
-    database: process.env.DB_NAME,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    max: 20,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
-  });
+  if (hasPostgresConfig) {
+    try {
+      pgPool = new Pool({
+        host: process.env.DB_HOST,
+        port: process.env.DB_PORT || 5432,
+        database: process.env.DB_NAME,
+        user: process.env.DB_USER,
+        password: process.env.DB_PASSWORD,
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 2000
+      });
 
-  pool.query('SELECT NOW()', (err, res) => {
-    if (err) {
-      console.warn('⚠️ WARNING: Failed to connect to PostgreSQL. Falling back to In-Memory DB Mode.');
-      console.error('Error details:', err.message);
-      isMock = true;
-    } else {
-      console.log('🐘 PostgreSQL connected successfully. Running in Database Mode.');
-      isMock = false;
+      pgPool.query('SELECT NOW()', (err) => {
+        if (err) {
+          console.warn('⚠️ Admin PostgreSQL connection failed. Falling back to Shared SQLite Real Database.');
+          setupSQLite();
+        } else {
+          console.log('🐘 Admin connected successfully to PostgreSQL Production Database.');
+          dbType = 'postgres';
+          isMock = false;
+        }
+      });
+    } catch (e) {
+      setupSQLite();
     }
-  });
-} else {
-  console.log('ℹ️ No PostgreSQL credentials found. Starting in In-Memory DB Mode.');
-  isMock = true;
+  } else {
+    setupSQLite();
+  }
 }
 
-module.exports = {
-  isMock,
-  memoryDB,
-  query: async (text, params) => {
-    if (!isMock && pool) {
-      return pool.query(text, params);
+function setupSQLite() {
+  dbType = 'sqlite';
+  console.log(`🗄️ Admin connecting to Real SQLite Database at: ${sqliteDbPath}`);
+  
+  sqliteDb = new sqlite3.Database(sqliteDbPath, (err) => {
+    if (err) {
+      console.error('❌ Failed to open SQLite database in admin:', err);
+      isMock = true;
+    } else {
+      console.log('✅ Admin Connected to Real Shared SQLite Database.');
+      isMock = false;
+      ensureAdminTables();
     }
-    throw new Error('Running in Mock Mode. Use memoryDB helpers instead.');
+  });
+}
+
+// admin-app shares clinic-app's SQLite file, which only bootstraps clinic
+// tables. Ensure the admin-only tables (audit trail, admin accounts) exist
+// too, so admin_audit_logs reads/writes don't fail against a missing table.
+function ensureAdminTables() {
+  sqliteDb.serialize(() => {
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS admin_users (
+      id TEXT PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      full_name TEXT NOT NULL,
+      role TEXT DEFAULT 'admin',
+      status TEXT DEFAULT 'active',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS admin_audit_logs (
+      id TEXT PRIMARY KEY,
+      admin_id TEXT,
+      action TEXT NOT NULL,
+      target_type TEXT,
+      target_id TEXT,
+      details TEXT,
+      ip_address TEXT,
+      user_agent TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    // Seed admin_users from the in-memory accounts so the audit-logs JOIN can
+    // resolve operator names even before any write path targets this table.
+    const stmt = sqliteDb.prepare(`INSERT OR IGNORE INTO admin_users (id, email, password_hash, full_name, role, status) VALUES (?, ?, ?, ?, ?, ?)`);
+    memoryDB.admin_users.forEach(u => {
+      stmt.run(u.id, u.email, u.password_hash, u.full_name, u.role, u.status);
+    });
+    stmt.finalize();
+  });
+}
+
+initDatabase();
+
+// Promisified DB helpers
+const db = {
+  isMock: false,
+  memoryDB,
+  getDbType: () => dbType,
+
+  all: (sql, params = []) => {
+    return new Promise((resolve, reject) => {
+      if (dbType === 'postgres' && pgPool) {
+        pgPool.query(sql, params, (err, res) => {
+          if (err) reject(err);
+          else resolve(res.rows);
+        });
+      } else if (sqliteDb) {
+        sqliteDb.all(sql, params, (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows || []);
+        });
+      } else {
+        resolve([]);
+      }
+    });
+  },
+
+  get: (sql, params = []) => {
+    return new Promise((resolve, reject) => {
+      if (dbType === 'postgres' && pgPool) {
+        pgPool.query(sql, params, (err, res) => {
+          if (err) reject(err);
+          else resolve(res.rows[0] || null);
+        });
+      } else if (sqliteDb) {
+        sqliteDb.get(sql, params, (err, row) => {
+          if (err) reject(err);
+          else resolve(row || null);
+        });
+      } else {
+        resolve(null);
+      }
+    });
+  },
+
+  run: (sql, params = []) => {
+    return new Promise((resolve, reject) => {
+      if (dbType === 'postgres' && pgPool) {
+        pgPool.query(sql, params, (err, res) => {
+          if (err) reject(err);
+          else resolve({ changes: res.rowCount });
+        });
+      } else if (sqliteDb) {
+        sqliteDb.run(sql, params, function (err) {
+          if (err) reject(err);
+          else resolve({ id: this.lastID, changes: this.changes });
+        });
+      } else {
+        resolve({ changes: 0 });
+      }
+    });
+  },
+
+  query: async (text, params = []) => {
+    if (dbType === 'postgres' && pgPool) {
+      return pgPool.query(text, params);
+    }
+    if (sqliteDb) {
+      const isSelect = text.trim().toUpperCase().startsWith('SELECT');
+      if (isSelect) {
+        const rows = await db.all(text, params);
+        return { rows, rowCount: rows.length };
+      } else {
+        const res = await db.run(text, params);
+        return { rows: [], rowCount: res.changes };
+      }
+    }
+    return { rows: [], rowCount: 0 };
   }
 };
+
+module.exports = db;

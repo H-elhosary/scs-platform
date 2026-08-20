@@ -53,6 +53,8 @@ CREATE TABLE IF NOT EXISTS users (
     phone VARCHAR(50),
     password_hash VARCHAR(255) NOT NULL,
     status VARCHAR(50) DEFAULT 'active' CHECK (status IN ('active', 'suspended')),
+    failed_login_attempts INT DEFAULT 0,
+    locked_until TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(tenant_id, email)
@@ -82,6 +84,22 @@ CREATE TABLE IF NOT EXISTS admin_sessions (
     is_verified BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 6. Support Tickets Table (طلبات الدعم والترقية المرسلة من العيادات)
+CREATE TABLE IF NOT EXISTS tickets (
+    id VARCHAR(100) PRIMARY KEY,
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    tenant_name VARCHAR(255),
+    type VARCHAR(50) NOT NULL,
+    type_ar VARCHAR(100),
+    title VARCHAR(255) NOT NULL,
+    description TEXT NOT NULL,
+    status VARCHAR(50) DEFAULT 'pending',
+    response_notes TEXT DEFAULT '',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_tickets_tenant ON tickets(tenant_id);
 
 -- ==========================================
 -- Seed Initial Data

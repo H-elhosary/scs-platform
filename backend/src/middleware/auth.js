@@ -1,7 +1,10 @@
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
-const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || 'your_jwt_access_secret_key_12345';
+const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET;
+if (!JWT_ACCESS_SECRET) {
+  throw new Error('JWT_ACCESS_SECRET is not set in the environment. Refusing to start with an insecure default secret.');
+}
 
 /**
  * Authentication Middleware to verify JWT and extract user context

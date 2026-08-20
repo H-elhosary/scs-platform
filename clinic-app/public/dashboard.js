@@ -161,7 +161,7 @@ function renderTodayQueue() {
         <td><strong class="queue-num-val">${apt.queue_number}</strong></td>
         <td>
           <div class="patient-info-col">
-            <strong onclick="location.href='patients.html?id=${apt.patient_id || ''}'">${apt.patient_name}</strong>
+            <strong onclick="location.href='patients.html?id=${apt.patient_id || ''}'">${escapeHtml(apt.patient_name)}</strong>
             <span>${apt.patient_phone}</span>
           </div>
         </td>
