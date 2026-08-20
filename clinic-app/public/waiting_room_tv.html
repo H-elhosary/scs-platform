@@ -528,6 +528,16 @@
 
   <script>
     const API_BASE = '';
+
+    // Escape untrusted text (patient-supplied WhatsApp/Telegram profile names)
+    // before interpolating it into innerHTML — this screen runs unattended and
+    // publicly visible, so a malicious profile name must not execute as HTML.
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text == null ? '' : String(text);
+      return div.innerHTML;
+    }
+
     let lastCalledAt = '';
     let audioActivated = false;
     let voices = [];
@@ -913,7 +923,7 @@
               <div class="tv-queue-item" ${item.is_urgent ? 'style="border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.06);"' : ''}>
                 <div class="tv-queue-num" ${item.is_urgent ? 'style="background: rgba(239,68,68,0.15); color: #ef4444;"' : ''}>${item.queue_number}</div>
                 <div style="display: flex; flex-direction: column; gap: 2px; flex: 1;">
-                  <div class="tv-queue-name">${item.patient_name}</div>
+                  <div class="tv-queue-name">${escapeHtml(item.patient_name)}</div>
                   ${item.is_urgent ? '<div style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #ef4444; font-weight: 700;"><i class="fa-solid fa-bolt"></i> حالة عاجلة</div>' : ''}
                 </div>
                 <div class="tv-queue-eta"><i class="fa-solid fa-clock" style="color: #334155; font-size: 11px;"></i> ~ ${etaMin} د</div>

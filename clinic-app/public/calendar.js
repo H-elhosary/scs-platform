@@ -269,8 +269,11 @@ function showNewAppointmentModal(date, time) {
     docSelect.required = true;
   } else {
     if (docGroup) docGroup.style.display = 'none';
-    docSelect.innerHTML = '<option value="doc-uuid-noor-1">د. محمد نور</option>';
-    docSelect.value = 'doc-uuid-noor-1';
+    const soloDoctor = allDoctors[0] || null;
+    docSelect.innerHTML = soloDoctor
+      ? `<option value="${soloDoctor.id}">${soloDoctor.full_name}</option>`
+      : '<option value="">لا يوجد طبيب مسجل</option>';
+    docSelect.value = soloDoctor ? soloDoctor.id : '';
     docSelect.required = false;
   }
 
@@ -348,7 +351,7 @@ async function updateAvailableSlots() {
     container.innerHTML = `<span style="color:#ef4444; font-size:12px; font-weight:700;"><i class="fa-solid fa-triangle-exclamation"></i> لا يمكن الحجز في تاريخ قد مضى! يرجى اختيار تاريخ اليوم أو تاريخ قادم.</span>`;
     return;
   }
-  const doctorId = doctorSelect.value || (allowMultiDoctor ? "" : "doc-uuid-noor-1");
+  const doctorId = doctorSelect.value || (allowMultiDoctor ? "" : (allDoctors[0] ? allDoctors[0].id : ""));
   const serviceId = document.getElementById('apt-service').value;
   const warningBox = document.getElementById('apt-time-warning');
   

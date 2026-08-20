@@ -1,11 +1,39 @@
 // Settings Page Specific Logic
 let isEditingWorkingHours = false;
-let settingsSelectedDoctorId = "doc-uuid-noor-1";
+let settingsSelectedDoctorId = ""; // corrected to the tenant's real first doctor once allDoctors loads
 let clinicBranches = [];
 
 document.addEventListener('sharedDataReady', () => {
   initSettings();
 });
+
+// Files a real upgrade ticket through the existing support-ticket system
+// instead of just telling the doctor to go find an admin themselves.
+async function requestFeatureUpgrade(featureLabel, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'جاري الإرسال...'; }
+  try {
+    const res = await authFetch(`${API_BASE}/v1/tickets`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'upgrade',
+        title: `طلب ترقية الباقة لتفعيل: ${featureLabel}`,
+        description: `طلب مُرسل تلقائياً من صفحة الإعدادات لتفعيل ميزة "${featureLabel}" غير المتاحة في الباقة الحالية.`
+      })
+    }).then(r => r.json());
+
+    if (res.success) {
+      showToast('تم إرسال طلب الترقية بنجاح، وسيتواصل معك فريق الدعم قريباً', 'success');
+      if (btn) btn.textContent = 'تم إرسال الطلب ✓';
+    } else {
+      showToast(res.error?.message || 'فشل إرسال طلب الترقية', 'error');
+      if (btn) { btn.disabled = false; btn.textContent = 'طلب ترقية الباقة'; }
+    }
+  } catch (e) {
+    showToast('تعذر الاتصال بالخادم — حاول مرة أخرى', 'error');
+    if (btn) { btn.disabled = false; btn.textContent = 'طلب ترقية الباقة'; }
+  }
+}
 
 async function initSettings() {
   // Load branches first

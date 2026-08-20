@@ -17,6 +17,7 @@ const settingsRoutes = require('./settingsRoutes');
 const conversationRoutes = require('./conversationRoutes');
 const ticketRoutes = require('./ticketRoutes');
 const doctorRoutes = require('./doctorRoutes');
+const notificationRoutes = require('./notificationRoutes');
 
 // Public: read-only queue status feeds the unattended waiting-room TV display,
 // which has no login flow of its own. Mounted BEFORE the auth gate below.
@@ -45,5 +46,6 @@ router.use(settingsRoutes);
 router.use(conversationRoutes);
 router.use(ticketRoutes);
 router.use(doctorRoutes);
+router.use(notificationRoutes);
 
 module.exports = router;

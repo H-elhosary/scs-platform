@@ -40,49 +40,31 @@ router.post('/v1/auth/login', async (req, res) => {
   }
 
   try {
-    let user = null;
-    let tenant = null;
+    let matchedUser = null;
+    let matchedTenant = null;
 
-    if (db.isMock) {
-      user = db.memoryDB.users.find(u => u.email.toLowerCase() === email.toLowerCase());
-      if (user) {
-        tenant = db.memoryDB.tenants.find(t => t.id === user.tenant_id);
-      }
-    } else {
-      const userRow = await db.get('SELECT * FROM users WHERE email = ?', [email]);
-      if (userRow) {
-        user = userRow;
-        tenant = await db.get('SELECT * FROM tenants WHERE id = ?', [user.tenant_id]);
-      }
+    const userRows = await db.all('SELECT * FROM users WHERE LOWER(email) = ?', [email.toLowerCase()]);
+    
+    for (const u of userRows) {
+      try {
+        const isValid = await bcrypt.compare(password, u.password_hash);
+        if (isValid) {
+          matchedUser = u;
+          matchedTenant = await db.get('SELECT * FROM tenants WHERE id = ?', [u.tenant_id]);
+          break;
+        }
+      } catch (e) {}
     }
 
-    if (!user) {
+    if (!matchedUser) {
       return res.status(401).json({
         success: false,
         error: { code: "INVALID_CREDENTIALS", message: "البريد الإلكتروني أو كلمة المرور غير صحيحة" }
       });
     }
 
-    // Check account lock
-    if (user.locked_until && new Date(user.locked_until) > new Date()) {
-      return res.status(403).json({
-        success: false,
-        error: { code: "ACCOUNT_LOCKED", message: "الحساب مقفل مؤقتاً. حاول مرة أخرى لاحقاً." }
-      });
-    }
-
-    // Verify password
-    let passwordValid = false;
-    try {
-      passwordValid = await bcrypt.compare(password, user.password_hash);
-    } catch(e) {}
-
-    if (!passwordValid) {
-      return res.status(401).json({
-        success: false,
-        error: { code: "INVALID_CREDENTIALS", message: "البريد الإلكتروني أو كلمة المرور غير صحيحة" }
-      });
-    }
+    const user = matchedUser;
+    const tenant = matchedTenant;
 
     // Get role
     let roleName = user.role || 'staff';

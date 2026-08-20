@@ -3,6 +3,14 @@ const cors = require('cors');
 const path = require('path');
 require('dotenv').config();
 
+// Catch unhandled errors
+process.on('uncaughtException', (err) => {
+  console.error('CRITICAL UNCAUGHT EXCEPTION:', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('UNHANDLED REJECTION:', reason);
+});
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -26,9 +34,14 @@ const clinicAuthRoutes = require('./src/routes/authRoutes');
 const clinicApiRoutes = require('./src/routes/clinic');
 const webhookRoutes = require('./src/routes/webhookRoutes');
 
+// webhookRoutes and clinicAuthRoutes must be mounted BEFORE clinicApiRoutes:
+// clinicApiRoutes applies an auth gate via router.use() with no path prefix,
+// which (by Express design) intercepts every request that reaches it — including
+// ones that don't match any route inside it. Mounting it last ensures the public
+// login and external webhook endpoints are matched first and never hit that gate.
 app.use(clinicAuthRoutes);
-app.use(clinicApiRoutes);
 app.use(webhookRoutes);
+app.use(clinicApiRoutes);
 
 // Root — serve index.html (login page)
 app.get('/', (req, res) => {

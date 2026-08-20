@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../db/connection');
 const { authenticateToken, requireOperator } = require('../middleware/auth');
 const bcrypt = require('bcryptjs');
+const emailService = require('../services/emailService');
 
 const router = express.Router();
 
@@ -90,26 +91,17 @@ router.get('/admin/v1/tenants', async (req, res) => {
   try {
     let tenantsList = [];
     
-    if (db.isMock) {
-      tenantsList = db.memoryDB.tenants.map(t => {
-        const ownerRole = db.memoryDB.roles.find(r => r.tenant_id === t.id && r.name === 'owner');
-        const owner = ownerRole ? db.memoryDB.users.find(u => u.role_id === ownerRole.id) : null;
-        return {
-          ...t,
-          owner_name: owner ? owner.full_name : null,
-          owner_email: owner ? owner.email : null,
-          owner_phone: owner ? owner.phone : null
-        };
-      });
-    } else {
-      const result = await db.query(`
+    try {
+      const rows = await db.all(`
         SELECT t.*, u.full_name as owner_name, u.email as owner_email, u.phone as owner_phone 
         FROM tenants t
-        LEFT JOIN roles r ON r.tenant_id = t.id AND r.name = 'owner'
-        LEFT JOIN users u ON u.role_id = r.id AND u.tenant_id = t.id
+        LEFT JOIN users u ON u.tenant_id = t.id AND u.role = 'owner'
         ORDER BY t.created_at DESC
       `);
-      tenantsList = result.rows;
+      tenantsList = rows || [];
+    } catch (dbErr) {
+      console.error('Error fetching tenants from DB:', dbErr);
+      tenantsList = [];
     }
 
     // Populate usage_stats and doctor objects for each tenant
@@ -251,192 +243,132 @@ router.post('/admin/v1/tenants', async (req, res) => {
 
   try {
     const tenantId = `tenant-${Math.random().toString(36).substring(7)}`;
-    const roleId = `role-owner-${Math.random().toString(36).substring(7)}`;
     const userId = `user-owner-${Math.random().toString(36).substring(7)}`;
+    const docId = `doc-${Math.random().toString(36).substring(7)}`;
     
     const startDate = subscription_start_date ? new Date(subscription_start_date).toISOString() : new Date().toISOString();
     const expiresAt = subscription_expires_at ? new Date(subscription_expires_at).toISOString() : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
 
-    // Default password for onboarding is "SecurePassword123!"
-    // Hashed with bcrypt: $2a$10$FA.b3tjWz0KQKGNlm.RGxu7gGb9FJcFC4AW/LKpPpH8uUE1w2.Ye6
-    const defaultHash = '$2a$10$FA.b3tjWz0KQKGNlm.RGxu7gGb9FJcFC4AW/LKpPpH8uUE1w2.Ye6';
+    // 1. Generate Secure Random Temporary Password
+    const randomPassword = 'Cl-' + Math.random().toString(36).substring(2, 6) + '#' + Math.floor(1000 + Math.random() * 9000);
+    const passwordHash = bcrypt.hashSync(randomPassword, 10);
 
-    let newTenant;
+    const features = getPlanFeatureFlags(subscription_plan);
 
-    if (db.isMock) {
-      // 1. Check unique slug
-      const exists = db.memoryDB.tenants.some(t => t.slug.toLowerCase() === slug.toLowerCase());
-      if (exists) {
-        return res.status(400).json({
-          success: false,
-          error: { code: "DUPLICATE_SLUG", message: "اسم رابط العيادة (Slug) مستخدم بالفعل" }
-        });
-      }
-
-      // 2. Create Tenant
-      const features = getPlanFeatureFlags(subscription_plan);
-      newTenant = {
-        id: tenantId,
-        name,
-        slug: slug.toLowerCase(),
-        status: 'active',
-        subscription_plan,
-        allow_multi_doctor: features.allow_multi_doctor,
-        allow_insurance: features.allow_insurance,
-        allow_refunds: features.allow_refunds,
-        allow_whatsapp: features.allow_whatsapp,
-        allow_telegram: features.allow_telegram,
-        allow_analytics: features.allow_analytics,
-        allow_voice_bot: features.allow_voice_bot,
-        allow_custom_branding: features.allow_custom_branding,
-        settings: {
-          notification_settings: {
-            patient_email_booking_confirm: true,
-            patient_whatsapp_booking_confirm: true,
-            patient_email_prescription: true,
-            patient_email_invoice: true,
-            doctor_email_new_booking: true,
-            doctor_whatsapp_new_booking: false,
-            doctor_email_daily_report: true,
-            doctor_email_weekly_report: true
-          }
-        },
-        expires_at: expiresAt,
-        created_at: startDate
-      };
-
-      db.memoryDB.tenants.push(newTenant);
-
-      // 3. Create Role Owner
-      db.memoryDB.roles.push({ id: roleId, tenant_id: tenantId, name: 'owner' });
-
-      // 4. Create User Owner
-      db.memoryDB.users.push({
-        id: userId,
-        tenant_id: tenantId,
-        role_id: roleId,
-        full_name: `د. مالك عيادة ${name}`,
-        email: email.toLowerCase(),
-        phone,
-        password_hash: defaultHash,
-        status: 'active',
-        failed_login_attempts: 0,
-        locked_until: null
+    // 2. Check for duplicate slug in SQLite / DB
+    const existingTenant = await db.get(`SELECT id FROM tenants WHERE LOWER(slug) = ?`, [slug.toLowerCase()]);
+    if (existingTenant) {
+      return res.status(400).json({
+        success: false,
+        error: { code: "DUPLICATE_SLUG", message: "اسم رابط العيادة (Slug) مستخدم بالفعل" }
       });
-
-    } else {
-      // PostgreSQL Database mode
-      // Start database transaction
-      await db.query('BEGIN');
-      try {
-        // 1. Insert Tenant
-        const features = getPlanFeatureFlags(subscription_plan);
-        let tenantRes;
-        try {
-          tenantRes = await db.query(
-            `INSERT INTO tenants (name, slug, subscription_plan, expires_at, created_at, 
-                                  allow_multi_doctor, allow_insurance, allow_refunds, 
-                                  allow_whatsapp, allow_telegram, allow_analytics, allow_voice_bot, allow_custom_branding) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
-            [
-              name, 
-              slug.toLowerCase(), 
-              subscription_plan, 
-              expiresAt, 
-              startDate, 
-              features.allow_multi_doctor, 
-              features.allow_insurance, 
-              features.allow_refunds,
-              features.allow_whatsapp,
-              features.allow_telegram,
-              features.allow_analytics,
-              features.allow_voice_bot,
-              features.allow_custom_branding
-            ]
-          );
-        } catch (pgErr) {
-          tenantRes = await db.query(
-            `INSERT INTO tenants (name, slug, subscription_plan, expires_at, allow_multi_doctor, allow_insurance, allow_refunds) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-            [name, slug.toLowerCase(), subscription_plan, expiresAt, features.allow_multi_doctor, features.allow_insurance, features.allow_refunds]
-          );
-        }
-        newTenant = tenantRes.rows[0];
-
-        // 2. Insert Owner Role
-        const roleRes = await db.query(
-          `INSERT INTO roles (tenant_id, name) VALUES ($1, $2) RETURNING id`,
-          [newTenant.id, 'owner']
-        );
-        const dbRoleId = roleRes.rows[0].id;
-
-        // 3. Insert Doctor User
-        await db.query(
-          `INSERT INTO users (tenant_id, role_id, full_name, email, phone, password_hash) 
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [newTenant.id, dbRoleId, `د. مالك عيادة ${name}`, email.toLowerCase(), phone, defaultHash]
-        );
-
-        await db.query('COMMIT');
-      } catch (dbErr) {
-        await db.query('ROLLBACK');
-        throw dbErr;
-      }
     }
+
+    // 3. Insert Tenant into Real Database
+    await db.run(`
+      INSERT INTO tenants (id, name, slug, status, subscription_plan, specialty, allow_multi_doctor, allow_insurance, allow_refunds, expires_at, created_at)
+      VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      tenantId,
+      name,
+      slug.toLowerCase(),
+      subscription_plan,
+      specialty || 'dental',
+      features.allow_multi_doctor ? 1 : 0,
+      features.allow_insurance ? 1 : 0,
+      features.allow_refunds ? 1 : 0,
+      expiresAt,
+      startDate
+    ]);
+
+    // 4. Insert Owner User into Real Database
+    const ownerName = `د. مالك عيادة ${name}`;
+    await db.run(`
+      INSERT INTO users (id, tenant_id, full_name, email, phone, password_hash, role, status)
+      VALUES (?, ?, ?, ?, ?, ?, 'owner', 'active')
+    `, [userId, tenantId, ownerName, email.toLowerCase(), phone || '+201012345678', passwordHash]);
+
+    // 5. Insert Doctor Record
+    await db.run(`
+      INSERT INTO doctors (id, tenant_id, full_name, specialty)
+      VALUES (?, ?, ?, ?)
+    `, [docId, tenantId, ownerName, specialty || 'عام']);
+
+    // 6. Seed Default Specialty Services for the new Clinic
+    const starterServices = {
+      dental: [
+        { name: 'كشف عام', name_en: 'General Exam', price: 500, duration: 20, cat: 'exam' },
+        { name: 'متابعة واستشارة', name_en: 'Follow-up', price: 0, duration: 15, cat: 'followup' },
+        { name: 'تنظيف وتلميع أسنان', name_en: 'Teeth Cleaning', price: 800, duration: 30, cat: 'procedure' },
+        { name: 'حشو عصب', name_en: 'Root Canal', price: 2500, duration: 60, cat: 'procedure' }
+      ],
+      orthopedic: [
+        { name: 'كشف عظام ومفاصل', name_en: 'Orthopedic Exam', price: 600, duration: 30, cat: 'exam' },
+        { name: 'متابعة', name_en: 'Follow-up', price: 300, duration: 15, cat: 'followup' },
+        { name: 'أشعة سينية', name_en: 'X-Ray', price: 400, duration: 20, cat: 'diagnostic' },
+        { name: 'علاج طبيعي', name_en: 'Physiotherapy', price: 800, duration: 45, cat: 'procedure' }
+      ],
+      dermatology: [
+        { name: 'كشف جلدية وتجميل', name_en: 'Dermatology Exam', price: 600, duration: 25, cat: 'exam' },
+        { name: 'جلسة ليزر', name_en: 'Laser Session', price: 1200, duration: 30, cat: 'procedure' },
+        { name: 'تنظيف بشرة علاجي', name_en: 'HydraFacial', price: 1500, duration: 45, cat: 'procedure' }
+      ],
+      general: [
+        { name: 'كشف طبي شامل', name_en: 'General Checkup', price: 400, duration: 20, cat: 'exam' },
+        { name: 'استشارة ومتابعة', name_en: 'Follow-up', price: 200, duration: 15, cat: 'followup' }
+      ]
+    };
+
+    const sList = starterServices[specialty] || starterServices.general;
+    for (const svc of sList) {
+      const sId = `svc-${Math.random().toString(36).substring(7)}`;
+      await db.run(`
+        INSERT INTO services (id, tenant_id, name, name_en, price, duration_minutes, category, is_active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+      `, [sId, tenantId, svc.name, svc.name_en, svc.price, svc.duration, svc.cat]).catch(() => {});
+    }
+
+    const newTenant = await db.get(`SELECT * FROM tenants WHERE id = ?`, [tenantId]) || {
+      id: tenantId,
+      name,
+      slug: slug.toLowerCase(),
+      status: 'active',
+      subscription_plan,
+      specialty,
+      expires_at: expiresAt
+    };
 
     // Write audit log
     await logAdminAction(
       req.user.id,
       'tenant.create',
       'tenant',
-      newTenant.id,
-      { name, slug, specialty, subscription_plan },
+      tenantId,
+      { name, slug, specialty, subscription_plan, email },
       req
     );
 
-    // Write default subscription history entry
-    const historyEntry = {
-      id: `sub-hist-${Math.random().toString(36).substring(7)}`,
-      tenant_id: newTenant.id,
-      action: 'created',
-      old_plan: null,
-      new_plan: subscription_plan,
-      old_expires_at: null,
-      new_expires_at: expiresAt,
-      reason: 'Onboarding registration',
-      changed_by_admin_id: req.user.id,
-      created_at: new Date().toISOString()
-    };
-    if (db.isMock) {
-      if (!db.memoryDB.subscription_history) {
-        db.memoryDB.subscription_history = [];
-      }
-      db.memoryDB.subscription_history.push(historyEntry);
-    } else {
-      try {
-        await db.query(
-          `INSERT INTO subscription_history (tenant_id, action, old_plan, new_plan, old_expires_at, new_expires_at, reason, changed_by_admin_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [historyEntry.tenant_id, historyEntry.action, historyEntry.old_plan, historyEntry.new_plan, historyEntry.old_expires_at, historyEntry.new_expires_at, historyEntry.reason, historyEntry.changed_by_admin_id]
-        );
-      } catch (historyErr) {
-        console.error('Failed to log subscription history to DB:', historyErr);
-      }
-    }
+    const activationLink = `http://localhost:3001`;
 
-    // Trigger Platform Operations email/SMS alert to ops@SCS-ops.com about new clinic subscription
-    console.log(`\n==========================================`);
-    console.log(`📧 [Ops Subscription Alert] To: ops@SCS-ops.com`);
-    console.log(`📰 New Clinic Onboarded: ${name}`);
-    console.log(`💼 Plan: ${subscription_plan.toUpperCase()}`);
-    console.log(`⏰ Expiry Date: ${new Date(expiresAt).toLocaleDateString()}`);
-    console.log(`==========================================\n`);
+    // Send Welcome Email to Clinic Doctor with the generated random temporary password & Alert to Ops
+    emailService.notifyNewClinicWelcome({
+      tenant: newTenant,
+      owner: { full_name: ownerName, email },
+      temporaryPassword: randomPassword,
+      activationLink
+    }).catch(e => console.error('Welcome email error:', e));
+
+    emailService.notifyOpsNewClinicOnboarded({
+      tenant: newTenant,
+      owner: { full_name: ownerName, email }
+    }).catch(e => console.error('Ops onboard email error:', e));
 
     return res.status(201).json({
       success: true,
       data: {
         tenant: newTenant,
-        activation_link: `https://www.SCS-admin.com/activate?token=act_${newTenant.id}`
+        temporary_password: randomPassword,
+        activation_link: activationLink
       }
     });
 
@@ -565,13 +497,27 @@ router.put('/admin/v1/tenants/:id/subscription', async (req, res) => {
       req
     );
 
-    // Trigger Ops Email Alert for Subscription update
-    console.log(`\n==========================================`);
-    console.log(`📧 [Ops Subscription Alert] To: ops@SCS-ops.com`);
-    console.log(`🔄 Clinic Subscription Updated: ${tenant.name}`);
-    console.log(`💼 New Plan: ${tenant.subscription_plan.toUpperCase()}`);
-    console.log(`⏰ New Expiry: ${new Date(updatedExpiresAt).toLocaleDateString()}`);
-    console.log(`==========================================\n`);
+    // Find owner email for notification
+    let ownerEmail = null;
+    if (db.isMock) {
+      const ownerUser = db.memoryDB.users.find(u => u.tenant_id === id);
+      ownerEmail = ownerUser ? ownerUser.email : null;
+    } else {
+      try {
+        const oRes = await db.query(`SELECT email FROM users WHERE tenant_id = $1 LIMIT 1`, [id]);
+        if (oRes.rows.length > 0) ownerEmail = oRes.rows[0].email;
+      } catch (e) {}
+    }
+
+    // Trigger Email Notification for Subscription update
+    emailService.notifyClinicSubscriptionUpdated({
+      tenant,
+      ownerEmail,
+      oldPlan,
+      newPlan,
+      newExpiresAt: updatedExpiresAt,
+      reason: req.body.reason || 'تعديل وتحديث باقة الاشتراك'
+    }).catch(e => console.error('Sub email error:', e));
 
     return res.status(200).json({
       success: true,
@@ -637,12 +583,24 @@ router.put('/admin/v1/tenants/:id/status', async (req, res) => {
       req
     );
 
-    // Trigger Ops Alert for Clinic Suspension/Activation
-    console.log(`\n==========================================`);
-    console.log(`📧 [Ops Alert] To: ops@SCS-ops.com`);
-    console.log(`⚠️ Clinic Access Changed: ${tenant.name}`);
-    console.log(`🚦 Status: ${tenant.status.toUpperCase()}`);
-    console.log(`==========================================\n`);
+    // Find owner email for notification
+    let ownerEmail = null;
+    if (db.isMock) {
+      const ownerUser = db.memoryDB.users.find(u => u.tenant_id === id);
+      ownerEmail = ownerUser ? ownerUser.email : null;
+    } else {
+      try {
+        const oRes = await db.query(`SELECT email FROM users WHERE tenant_id = $1 LIMIT 1`, [id]);
+        if (oRes.rows.length > 0) ownerEmail = oRes.rows[0].email;
+      } catch (e) {}
+    }
+
+    // Trigger Email Alert for Clinic Suspension/Activation
+    emailService.notifyClinicStatusChanged({
+      tenant,
+      ownerEmail,
+      status
+    }).catch(e => console.error('Status email error:', e));
 
     return res.status(200).json({
       success: true,
@@ -669,24 +627,9 @@ router.get('/admin/v1/tenants/:id', async (req, res) => {
     let tenant = null;
     let owner = null;
 
-    if (db.isMock) {
-      tenant = db.memoryDB.tenants.find(t => t.id === id);
-      if (tenant) {
-        owner = db.memoryDB.users.find(u => u.tenant_id === id); // First owner user
-      }
-    } else {
-      // Postgres Mode
-      const tenantRes = await db.query('SELECT * FROM tenants WHERE id = $1', [id]);
-      if (tenantRes.rows.length > 0) {
-        tenant = tenantRes.rows[0];
-        const ownerRes = await db.query(
-          `SELECT u.* FROM users u 
-           JOIN roles r ON u.role_id = r.id 
-           WHERE u.tenant_id = $1 AND r.name = 'owner' LIMIT 1`,
-          [id]
-        );
-        owner = ownerRes.rows[0] || null;
-      }
+    tenant = await db.get('SELECT * FROM tenants WHERE id = ?', [id]);
+    if (tenant) {
+      owner = await db.get('SELECT * FROM users WHERE tenant_id = ? AND role = "owner" ORDER BY id ASC LIMIT 1', [id]);
     }
 
     if (!tenant) {
@@ -917,6 +860,74 @@ router.delete('/admin/v1/tenants/:id', async (req, res) => {
 });
 
 /**
+ * POST /admin/v1/tenants/:id/reset-password
+ * Reset doctor password and email the newly generated password to the doctor
+ */
+router.post('/admin/v1/tenants/:id/reset-password', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const tenant = await db.get('SELECT * FROM tenants WHERE id = ?', [id]);
+    if (!tenant) {
+      return res.status(404).json({
+        success: false,
+        error: { code: "NOT_FOUND", message: "العيادة غير موجودة" }
+      });
+    }
+
+    const owner = await db.get('SELECT * FROM users WHERE tenant_id = ? AND role = "owner" ORDER BY id ASC LIMIT 1', [id]);
+    if (!owner) {
+      return res.status(404).json({
+        success: false,
+        error: { code: "OWNER_NOT_FOUND", message: "لم يتم العثور على حساب الطبيب المالك" }
+      });
+    }
+
+    // Generate new random temporary password
+    const newPassword = 'Cl-' + Math.random().toString(36).substring(2, 6) + '#' + Math.floor(1000 + Math.random() * 9000);
+    const passwordHash = bcrypt.hashSync(newPassword, 10);
+
+    // Update in SQLite / Database
+    await db.run('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, owner.id]);
+
+    // Send email to the doctor with the new password
+    emailService.notifyDoctorPasswordReset({
+      owner,
+      tenant,
+      resetLink: 'http://localhost:3001',
+      temporaryPassword: newPassword
+    }).catch(e => console.error('Reset email error:', e));
+
+    // Write audit log
+    await logAdminAction(
+      req.user.id,
+      'doctor.reset_password',
+      'tenant',
+      id,
+      { doctorEmail: owner.email },
+      req
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: `تمت إعادة تعيين كلمة المرور بنجاح وإرسالها إلى البريد الإلكتروني ${owner.email}`,
+      data: {
+        email: owner.email,
+        temporary_password: newPassword,
+        login_url: 'http://localhost:3001',
+        reset_link: 'http://localhost:3001'
+      }
+    });
+  } catch (error) {
+    console.error('Error resetting password:', error);
+    return res.status(500).json({
+      success: false,
+      error: { code: "SERVER_ERROR", message: "حدث خطأ أثناء إعادة تعيين كلمة المرور" }
+    });
+  }
+});
+
+/**
  * PUT /admin/v1/tenants/:id/features
  * Override Feature Flags manually
  */
@@ -1068,11 +1079,12 @@ router.post('/admin/v1/tenants/:id/reset-password', async (req, res) => {
       req
     );
 
-    // Print to console
-    console.log(`\n==========================================`);
-    console.log(`📧 [Ops Password Reset Link Alert] To: ${owner.email}`);
-    console.log(`🔗 Reset Link: ${resetLink}`);
-    console.log(`==========================================\n`);
+    // Send Password Reset Email
+    emailService.notifyDoctorPasswordReset({
+      owner,
+      tenant,
+      resetLink
+    }).catch(e => console.error('Reset password email error:', e));
 
     return res.status(200).json({
       success: true,
@@ -1134,6 +1146,100 @@ router.get('/admin/v1/audit-logs', async (req, res) => {
     return res.status(500).json({
       success: false,
       error: { code: "SERVER_ERROR", message: "حدث خطأ أثناء جلب سجل العمليات" }
+    });
+  }
+});
+
+/**
+ * GET /admin/v1/tickets
+ * List all clinic-submitted support/upgrade/renewal tickets
+ */
+router.get('/admin/v1/tickets', async (req, res) => {
+  try {
+    let tickets = [];
+    if (db.isMock) {
+      tickets = [...db.memoryDB.tickets].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    } else {
+      const result = await db.query(`SELECT * FROM tickets ORDER BY created_at DESC`);
+      tickets = result.rows;
+    }
+    return res.status(200).json({ success: true, data: tickets });
+  } catch (error) {
+    console.error('Error fetching tickets:', error);
+    return res.status(500).json({
+      success: false,
+      error: { code: "SERVER_ERROR", message: "حدث خطأ أثناء جلب طلبات الدعم الفني" }
+    });
+  }
+});
+
+/**
+ * PUT /admin/v1/tickets/:id
+ * Update a ticket's status and add an operator response
+ */
+router.put('/admin/v1/tickets/:id', async (req, res) => {
+  const { id } = req.params;
+  const { status, response_notes } = req.body;
+  const validStatuses = ['pending', 'processing', 'resolved', 'rejected'];
+
+  if (status && !validStatuses.includes(status)) {
+    return res.status(400).json({
+      success: false,
+      error: { code: "BAD_REQUEST", message: "حالة الطلب غير صالحة" }
+    });
+  }
+
+  try {
+    let updated = null;
+    if (db.isMock) {
+      const ticket = db.memoryDB.tickets.find(t => t.id === id);
+      if (!ticket) {
+        return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "الطلب غير موجود" } });
+      }
+      if (status) ticket.status = status;
+      if (response_notes !== undefined) ticket.response_notes = response_notes;
+      updated = ticket;
+    } else {
+      await db.query(
+        `UPDATE tickets SET status = COALESCE($1, status), response_notes = COALESCE($2, response_notes) WHERE id = $3`,
+        [status || null, response_notes !== undefined ? response_notes : null, id]
+      );
+      const result = await db.query(`SELECT * FROM tickets WHERE id = $1`, [id]);
+      if (result.rows.length === 0) {
+        return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "الطلب غير موجود" } });
+      }
+      updated = result.rows[0];
+    }
+
+    await logAdminAction(req.user.id, 'ticket.update', 'ticket', id, { status, response_notes }, req);
+
+    // Send Email to Clinic with Operator's response
+    let clinicEmail = null;
+    if (updated.tenant_id) {
+      if (db.isMock) {
+        const ownerUser = db.memoryDB.users.find(u => u.tenant_id === updated.tenant_id);
+        clinicEmail = ownerUser ? ownerUser.email : null;
+      } else {
+        try {
+          const uRes = await db.query(`SELECT email FROM users WHERE tenant_id = $1 LIMIT 1`, [updated.tenant_id]);
+          if (uRes.rows.length > 0) clinicEmail = uRes.rows[0].email;
+        } catch(e) {}
+      }
+    }
+
+    emailService.notifyClinicTicketReplied({
+      ticket: updated,
+      clinicEmail,
+      responseNotes: response_notes || updated.response_notes,
+      status: status || updated.status
+    }).catch(e => console.error('Ticket reply email error:', e));
+
+    return res.status(200).json({ success: true, data: updated });
+  } catch (error) {
+    console.error('Error updating ticket:', error);
+    return res.status(500).json({
+      success: false,
+      error: { code: "SERVER_ERROR", message: "حدث خطأ أثناء تحديث الطلب" }
     });
   }
 });
@@ -1396,6 +1502,15 @@ router.put('/admin/v1/plans/:id', async (req, res) => {
     allow_voice_bot,
     allow_custom_branding
   } = req.body;
+
+  for (const [field, value] of [['price_egp', price_egp], ['price_usd', price_usd]]) {
+    if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value < 0)) {
+      return res.status(400).json({
+        success: false,
+        error: { code: "BAD_REQUEST", message: `قيمة ${field} يجب أن تكون رقماً صحيحاً غير سالب` }
+      });
+    }
+  }
 
   try {
     let plan = null;

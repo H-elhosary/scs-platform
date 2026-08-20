@@ -107,7 +107,9 @@ function renderConversationsList(isPolling = false) {
     }
 
     // Avatar initials
-    const initials = (c.patient_name || 'م').split(' ').map(n => n[0]).slice(0, 2).join('');
+    const initials = escapeHtml((c.patient_name || 'م').split(' ').map(n => n[0]).slice(0, 2).join(''));
+    const safeName = escapeHtml(c.patient_name || '');
+    const safePreview = escapeHtml(lastMsg.body || 'لا توجد رسائل');
 
     return `
       <div class="chat-conv-item ${isActive ? 'active' : ''} ${c.unread_count > 0 ? 'unread' : ''}" onclick="openChat('${c.id}')">
@@ -119,12 +121,12 @@ function renderConversationsList(isPolling = false) {
         </div>
         <div class="chat-conv-info">
           <div class="chat-conv-top-row">
-            <h4 class="chat-conv-name">${c.patient_name}</h4>
+            <h4 class="chat-conv-name">${safeName}</h4>
             <span class="chat-conv-time">${timeStr}</span>
           </div>
           <div class="chat-conv-bottom-row">
             <p class="chat-conv-preview">
-              ${lastMsg.sender === 'patient' ? '' : '<strong>أنت: </strong>'}${lastMsg.body || 'لا توجد رسائل'}
+              ${lastMsg.sender === 'patient' ? '' : '<strong>أنت: </strong>'}${safePreview}
             </p>
             <div style="display: flex; align-items: center; gap: 6px;">
               ${c.bot_active ? `<span class="chat-bot-tag"><i class="fa-solid fa-robot"></i> آلي</span>` : ''}
@@ -160,7 +162,8 @@ function renderChatWindow() {
   const win = document.getElementById('chat-window');
   if (!win || !activeChat) return;
 
-  const initials = (activeChat.patient_name || 'م').split(' ').map(n => n[0]).slice(0, 2).join('');
+  const initials = escapeHtml((activeChat.patient_name || 'م').split(' ').map(n => n[0]).slice(0, 2).join(''));
+  const safeActiveChatName = escapeHtml(activeChat.patient_name || '');
   const channelName = activeChat.channel === 'whatsapp' ? 'واتساب' : 'تليجرام';
   const channelIcon = activeChat.channel === 'whatsapp' ? 'fa-whatsapp' : 'fa-telegram';
   const channelColor = activeChat.channel === 'whatsapp' ? '#16a34a' : '#0284c7';
@@ -172,7 +175,7 @@ function renderChatWindow() {
         <div class="chat-header-avatar">${initials}</div>
         <div class="chat-header-details">
           <h3>
-            ${activeChat.patient_name}
+            ${safeActiveChatName}
             <span style="font-size: 11px; font-weight: 700; color: ${channelColor};">
               <i class="fa-brands ${channelIcon}"></i> ${channelName}
             </span>
@@ -354,8 +357,4 @@ function viewPatientProfile(patientId) {
   window.location.href = `patients.html?patient_id=${patientId}`;
 }
 
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
+// escapeHtml() is now defined globally in core/shared.js (loaded before this file).

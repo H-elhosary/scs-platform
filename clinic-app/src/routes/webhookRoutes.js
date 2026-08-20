@@ -2,6 +2,27 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/connection');
 const botController = require('../services/botController');
+const emailService = require('../services/emailService');
+const notificationService = require('../services/notificationService');
+
+// The debug endpoints below (bot-state / reset-state / seed-visit) let anyone
+// inspect or mutate any patient's conversation/booking state with no auth
+// check — they exist only so the bot.js simulator tool can drive test flows.
+// Hard-disable them outside development so they can never be reached in a
+// real deployment.
+const devOnly = (req, res, next) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "غير متاح" } });
+  }
+  next();
+};
+
+// Mask a phone number / chat id for logging — keep enough to correlate log
+// lines during debugging without printing the full identifier.
+const maskId = (id) => {
+  const s = String(id || '');
+  return s.length > 4 ? `***${s.slice(-4)}` : '***';
+};
 
 /**
  * 1. WhatsApp Webhook Verification (Meta API)
@@ -26,7 +47,7 @@ router.get('/webhooks/whatsapp', (req, res) => {
 router.post('/webhooks/whatsapp', async (req, res) => {
   try {
     const body = req.body;
-    console.log(`[WhatsApp Webhook Received]`, JSON.stringify(body, null, 2));
+    console.log(`[WhatsApp Webhook Received]`);
 
     // Extract message details
     const entry = body.entry && body.entry[0];
@@ -43,15 +64,14 @@ router.post('/webhooks/whatsapp', async (req, res) => {
       // Default to Mohmamed Noor clinic ID for simulation
       const tenantId = "a7b3c2d1-e5f6-7a8b-9c0d-1e2f3a4b5c6d";
 
-      console.log(`\n💬 [WhatsApp Received] From: ${fromNumber} (${name}): "${text}"`);
+      console.log(`\n💬 [WhatsApp Received] From: ${maskId(fromNumber)} — message length: ${text.length}`);
 
       // Handle message
       const botResponse = await botController.handleIncomingMessage(tenantId, 'whatsapp', fromNumber, text, name);
 
-      // Print simulated outgoing reply
+      // Print simulated outgoing reply (reply content withheld from logs — may echo patient details)
       console.log(`\n==========================================`);
-      console.log(`📱 [WhatsApp Outgoing Reply] To: ${fromNumber}`);
-      console.log(`✉️ Message:\n${botResponse.reply}`);
+      console.log(`📱 [WhatsApp Outgoing Reply] To: ${maskId(fromNumber)}`);
       console.log(`==========================================\n`);
 
       return res.status(200).json({
@@ -64,7 +84,7 @@ router.post('/webhooks/whatsapp', async (req, res) => {
     return res.status(200).json({ success: true, status: 'no_message' });
   } catch (error) {
     console.error('Error in WhatsApp webhook handler:', error);
-    return res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: { code: "INTERNAL_SERVER_ERROR", message: "حدث خطأ غير متوقع في الخادم" } });
   }
 });
 
@@ -74,7 +94,7 @@ router.post('/webhooks/whatsapp', async (req, res) => {
 router.post('/webhooks/telegram', async (req, res) => {
   try {
     const body = req.body;
-    console.log(`[Telegram Webhook Received]`, JSON.stringify(body, null, 2));
+    console.log(`[Telegram Webhook Received]`);
 
     const message = body.message;
     if (message) {
@@ -84,13 +104,12 @@ router.post('/webhooks/telegram', async (req, res) => {
 
       const tenantId = "a7b3c2d1-e5f6-7a8b-9c0d-1e2f3a4b5c6d";
 
-      console.log(`\n💬 [Telegram Received] From Chat ID: ${chatId} (${firstName}): "${text}"`);
+      console.log(`\n💬 [Telegram Received] From Chat ID: ${maskId(chatId)} — message length: ${text.length}`);
 
       const botResponse = await botController.handleIncomingMessage(tenantId, 'telegram', chatId, text, firstName);
 
       console.log(`\n==========================================`);
-      console.log(`📱 [Telegram Outgoing Reply] To Chat ID: ${chatId}`);
-      console.log(`✉️ Message:\n${botResponse.reply}`);
+      console.log(`📱 [Telegram Outgoing Reply] To Chat ID: ${maskId(chatId)}`);
       console.log(`==========================================\n`);
 
       return res.status(200).json({
@@ -103,7 +122,7 @@ router.post('/webhooks/telegram', async (req, res) => {
     return res.status(200).json({ success: true, status: 'no_message' });
   } catch (error) {
     console.error('Error in Telegram webhook handler:', error);
-    return res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: { code: "INTERNAL_SERVER_ERROR", message: "حدث خطأ غير متوقع في الخادم" } });
   }
 });
 
@@ -127,15 +146,47 @@ router.post('/webhooks/payments/paymob', async (req, res) => {
       console.log(`💳 [Paymob Success] Invoice ID: ${invoiceId}, Appointment ID: ${appointmentId}, Amount: ${amount} EGP`);
 
       // Confirm appointment & Mark invoice Paid
-      if (db.isMock) {
-        const appt = db.memoryDB.appointments.find(a => a.id === appointmentId);
-        if (appt) appt.status = 'confirmed';
+      let appt = null;
+      let patient = null;
+      let tenant = null;
 
-        const inv = db.memoryDB.invoices.find(i => i.id === invoiceId);
+      if (db.isMock) {
+        appt = db.memoryDB.appointments.find(a => a.id === appointmentId);
+        if (appt) {
+          appt.status = 'confirmed';
+          appt.payment_status = 'paid';
+          patient = db.memoryDB.patients.find(p => p.id === appt.patient_id);
+          tenant = db.memoryDB.tenants.find(t => t.id === appt.tenant_id);
+        }
+
+        const inv = db.memoryDB.invoices ? db.memoryDB.invoices.find(i => i.id === invoiceId) : null;
         if (inv) inv.status = 'paid';
       } else {
-        await db.query(`UPDATE appointments SET status = 'confirmed', updated_at = NOW() WHERE id = $1`, [appointmentId]);
-        await db.query(`UPDATE invoices SET status = 'paid', updated_at = NOW() WHERE id = $1`, [invoiceId]);
+        await db.run(`UPDATE appointments SET status = 'confirmed', payment_status = 'paid' WHERE id = ?`, [appointmentId]);
+        appt = await db.get(`SELECT * FROM appointments WHERE id = ?`, [appointmentId]);
+        if (appt) {
+          patient = await db.get(`SELECT * FROM patients WHERE id = ?`, [appt.patient_id]);
+          tenant = await db.get(`SELECT * FROM tenants WHERE id = ?`, [appt.tenant_id]);
+        }
+      }
+
+      // Send Payment Receipt Email & Notification
+      if (appt && tenant) {
+        emailService.notifyPaymentReceipt({
+          patient,
+          amount,
+          appointmentId,
+          invoiceId,
+          clinic: tenant
+        }).catch(e => console.error('Payment email error:', e));
+
+        notificationService.createNotification({
+          tenantId: appt.tenant_id,
+          title: `تم سداد إلكتروني بنجاح: ${amount} ج.م`,
+          message: `تم تحصيل مبلغ ${amount} ج.م عبر Paymob للموعد #${appointmentId} (${patient?.full_name || 'مريض'})`,
+          type: 'success',
+          link: '/calendar.html'
+        }).catch(e => console.error('In-app notif error:', e));
       }
 
       console.log(`\n==========================================`);
@@ -151,7 +202,7 @@ router.post('/webhooks/payments/paymob', async (req, res) => {
     return res.status(200).json({ success: false, message: 'Transaction pending or failed' });
   } catch (error) {
     console.error('Error in Paymob webhook handler:', error);
-    return res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: { code: "INTERNAL_SERVER_ERROR", message: "حدث خطأ غير متوقع في الخادم" } });
   }
 });
 
@@ -301,7 +352,7 @@ router.get('/webhooks/payments/paymob/simulate', (req, res) => {
 /**
  * 6. Debug Endpoint: Get Bot State
  */
-router.get('/webhooks/payments/bot-state', (req, res) => {
+router.get('/webhooks/payments/bot-state', devOnly, (req, res) => {
   const { phone } = req.query;
   const state = botController.conversationStates[phone] || { step: 'IDLE' };
   return res.status(200).json({ success: true, state: state.step });
@@ -310,7 +361,7 @@ router.get('/webhooks/payments/bot-state', (req, res) => {
 /**
  * 7. Debug Endpoint: Reset Bot State
  */
-router.post('/webhooks/payments/reset-state', (req, res) => {
+router.post('/webhooks/payments/reset-state', devOnly, (req, res) => {
   const { phone } = req.body;
   if (phone) {
     delete botController.conversationStates[phone];
@@ -321,7 +372,7 @@ router.post('/webhooks/payments/reset-state', (req, res) => {
 /**
  * 8. Debug Endpoint: Seed Completed Visit for 14-days free followup check
  */
-router.post('/webhooks/payments/seed-visit', async (req, res) => {
+router.post('/webhooks/payments/seed-visit', devOnly, async (req, res) => {
   try {
     const { phone, tenant_id } = req.body;
     const phoneClean = phone.replace('+', '');
@@ -388,7 +439,7 @@ router.post('/webhooks/payments/seed-visit', async (req, res) => {
     return res.status(200).json({ success: true, message: "Completed visit injected." });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: { code: "INTERNAL_SERVER_ERROR", message: "حدث خطأ غير متوقع في الخادم" } });
   }
 });
 

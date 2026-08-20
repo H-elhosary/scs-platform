@@ -13,6 +13,9 @@ const express = require('express');
 const router = express.Router();
 const db = require('../../db/connection');
 const queueState = require('./queueState');
+const { encrypt } = require('../../utils/crypto');
+const emailService = require('../../services/emailService');
+const notificationService = require('../../services/notificationService');
 
 // Helper: convert "HH:MM" to total minutes
 const getMinutes = (t) => {
@@ -127,6 +130,37 @@ router.post('/v1/appointments', async (req, res) => {
     `, [id, tenantId, patient_id, targetDoctorId, service_id || 'svc-001', date, time, endTime, visit_type || 'exam', payment_method || 'cash', paymentStatus, amount, queueNumber, notes || '', bookingCode, location || '']);
 
     const newApt = await db.get(`SELECT * FROM appointments WHERE id = ?`, [id]);
+    const patientObj = await db.get(`SELECT * FROM patients WHERE id = ?`, [patient_id]);
+    const doctorObj = await db.get(`SELECT * FROM doctors WHERE id = ?`, [targetDoctorId]) || await db.get(`SELECT * FROM users WHERE tenant_id = ? AND role = 'owner'`, [tenantId]);
+    const tenantObj = await db.get(`SELECT * FROM tenants WHERE id = ?`, [tenantId]);
+
+    // Send notifications asynchronously (non-blocking)
+    if (patientObj) {
+      emailService.notifyPatientBookingConfirmed({
+        patient: patientObj,
+        appointment: newApt,
+        service,
+        doctor: doctorObj,
+        clinic: tenantObj
+      }).catch(e => console.error('Patient email error:', e));
+
+      emailService.notifyDoctorNewBooking({
+        doctor: doctorObj,
+        patient: patientObj,
+        appointment: newApt,
+        service,
+        clinic: tenantObj
+      }).catch(e => console.error('Doctor email error:', e));
+
+      notificationService.createNotification({
+        tenantId,
+        title: `حجز موعد جديد: ${patientObj.full_name}`,
+        message: `تم حجز موعد جديد يوم ${newApt.date} الساعة ${newApt.time} (كود: ${bookingCode})`,
+        type: 'booking',
+        link: '/calendar.html'
+      }).catch(e => console.error('In-app notification error:', e));
+    }
+
     return res.status(201).json({ success: true, data: newApt });
 
   } catch (err) {
@@ -220,6 +254,27 @@ router.put('/v1/appointments/:id/status', async (req, res) => {
     }
 
     const updated = await db.get(`SELECT * FROM appointments WHERE id = ?`, [apt.id]);
+    const patient = await db.get(`SELECT * FROM patients WHERE id = ?`, [apt.patient_id]);
+    const tenant = await db.get(`SELECT * FROM tenants WHERE id = ?`, [apt.tenant_id]);
+
+    // Send notifications if cancelled
+    if (status === 'cancelled' && patient) {
+      emailService.notifyPatientBookingCancelled({
+        patient,
+        appointment: apt,
+        clinic: tenant,
+        reason: req.body.reason || 'إلغاء عبر لوحة التحكم'
+      }).catch(e => console.error('Cancel email error:', e));
+
+      notificationService.createNotification({
+        tenantId: apt.tenant_id,
+        title: `إلغاء موعد: ${patient.full_name}`,
+        message: `تم إلغاء الموعد المحدد يوم ${apt.date} (${apt.booking_code})`,
+        type: 'warning',
+        link: '/calendar.html'
+      }).catch(e => console.error('In-app notification error:', e));
+    }
+
     return res.json({ success: true, data: updated });
   } catch (err) {
     return res.status(500).json({ success: false, error: { message: 'حدث خطأ أثناء تغيير حالة الموعد' } });
@@ -236,6 +291,26 @@ router.delete('/v1/appointments/:id', async (req, res) => {
       queueState.current_in_exam = null;
     }
     queueState.waiting_list = queueState.waiting_list.filter(item => item.appointment_id !== req.params.id);
+
+    if (apt) {
+      const patient = await db.get(`SELECT * FROM patients WHERE id = ?`, [apt.patient_id]);
+      const tenant = await db.get(`SELECT * FROM tenants WHERE id = ?`, [apt.tenant_id]);
+      if (patient) {
+        emailService.notifyPatientBookingCancelled({
+          patient,
+          appointment: apt,
+          clinic: tenant,
+          reason: 'إلغاء الحجز'
+        }).catch(e => console.error('Cancel email error:', e));
+
+        notificationService.createNotification({
+          tenantId: apt.tenant_id,
+          title: `تم حذف/إلغاء موعد: ${patient.full_name}`,
+          message: `تم إلغاء موعد ${apt.date} (${apt.booking_code})`,
+          type: 'warning'
+        }).catch(e => console.error('In-app notif error:', e));
+      }
+    }
 
     return res.json({ success: true, data: apt });
   } catch (err) {
@@ -267,10 +342,35 @@ router.post('/v1/appointments/:appointment_id/consultation', async (req, res) =>
     const objective = JSON.stringify(consultData.objective || {});
     const dentalRecords = JSON.stringify(consultData.dental_records || {});
 
+    const encSubjective = encrypt(consultData.subjective || "كشف سريري");
+    const encDiagnosis = encrypt(consultData.diagnosis_icd11 || "عام");
+    const encPlan = encrypt(consultData.plan || "");
+
     await db.run(`
       INSERT INTO medical_records (id, tenant_id, patient_id, appointment_id, doctor_id, subjective, objective, diagnosis_icd11, plan, prescription_items, dental_records)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [recordId, tenantId, apt.patient_id, appointment_id, apt.doctor_id || "doc-1", consultData.subjective || "كشف سريري", objective, consultData.diagnosis_icd11 || "عام", consultData.plan || "", prescriptionItems, dentalRecords]);
+    `, [recordId, tenantId, apt.patient_id, appointment_id, apt.doctor_id || "doc-1", encSubjective, objective, encDiagnosis, encPlan, prescriptionItems, dentalRecords]);
+
+    const patient = await db.get(`SELECT * FROM patients WHERE id = ?`, [apt.patient_id]);
+    const tenant = await db.get(`SELECT * FROM tenants WHERE id = ?`, [tenantId]);
+
+    // Send Consultation Complete Email & In-App Notification
+    if (patient) {
+      emailService.notifyPatientConsultationComplete({
+        patient,
+        appointment: apt,
+        medicalRecord: { id: recordId, ...consultData },
+        clinic: tenant
+      }).catch(e => console.error('Consultation complete email error:', e));
+
+      notificationService.createNotification({
+        tenantId,
+        title: `اكتمل الكشف الطبي: ${patient.full_name}`,
+        message: `تم توثيق الكشف وحفظ الروشتة للمريض بنجاح (كود: ${apt.booking_code})`,
+        type: 'success',
+        link: `/v1/prescriptions/${recordId}/pdf`
+      }).catch(e => console.error('In-app notif error:', e));
+    }
 
     return res.status(200).json({
       success: true,

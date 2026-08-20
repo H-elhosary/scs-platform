@@ -4,6 +4,7 @@
 // =============================================
 
 let currentExamAppointment = null;
+let currentExamDoctorId = null;
 let lastPrescriptionData = null;
 let bodyChartData = {};
 let activePopupPart = null;
@@ -861,8 +862,9 @@ async function loadExamData(apptId) {
     if (res.success) {
       const apt = res.data.find(a => a.id === apptId);
       if (apt) {
+        currentExamDoctorId = apt.doctor_id || null;
         document.getElementById('exam-patient-info').innerHTML = `
-          المريض: <strong style="color:#0f172a;">${apt.patient_name}</strong> 
+          المريض: <strong style="color:#0f172a;">${escapeHtml(apt.patient_name)}</strong>
           — نوع الزيارة: <strong>${apt.visit_type === 'exam' ? 'كشف جديد' : 'متابعة'}</strong> 
           — الخدمة: <strong>${apt.service_name}</strong>
         `;
@@ -959,7 +961,8 @@ function printPrescription() {
   const clinicName = localStorage.getItem('tenant_name') || 'عيادة النور';
   const isOrtho = currentSpecialty === 'orthopedic';
   const doctorSpecialty = isOrtho ? 'أخصائي جراحة العظام والمفاصل' : 'أخصائي طب وجراحة الأسنان';
-  const doctorName = isOrtho ? 'د. خالد عبد الرحمن' : 'د. محمد نور';
+  const examDoctor = (typeof allDoctors !== 'undefined' ? allDoctors : []).find(d => d.id === currentExamDoctorId);
+  const doctorName = examDoctor ? examDoctor.full_name : 'الطبيب المعالج';
 
   const printWin = window.open('', '_blank', 'width=800,height=900');
   printWin.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>روشتة طبية</title>

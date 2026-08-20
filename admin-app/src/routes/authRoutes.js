@@ -41,15 +41,18 @@ router.post('/admin/v1/auth/login', async (req, res) => {
   }
 
   try {
-    let admin = null;
+    let admin = db.memoryDB.admin_users.find(u => u.email.toLowerCase() === email.toLowerCase());
 
-    if (db.isMock) {
-      admin = db.memoryDB.admin_users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    } else {
-      const result = await db.query('SELECT * FROM admin_users WHERE email = $1', [email]);
-      if (result.rows.length > 0) {
-        admin = result.rows[0];
-      }
+    if (!admin) {
+      try {
+        const query = db.getDbType && db.getDbType() === 'postgres'
+          ? 'SELECT * FROM admin_users WHERE email = $1'
+          : 'SELECT * FROM admin_users WHERE email = ?';
+        const result = await db.query(query, [email]);
+        if (result.rows && result.rows.length > 0) {
+          admin = result.rows[0];
+        }
+      } catch (e) {}
     }
 
     if (!admin) {
@@ -133,10 +136,7 @@ router.post('/admin/v1/auth/verify-2fa', async (req, res) => {
     }
 
     // Find admin
-    let admin = null;
-    if (db.isMock) {
-      admin = db.memoryDB.admin_users.find(u => u.id === decoded.adminId);
-    }
+    let admin = db.memoryDB.admin_users.find(u => u.id === decoded.adminId);
 
     if (!admin) {
       return res.status(404).json({

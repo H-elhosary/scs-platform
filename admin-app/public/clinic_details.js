@@ -1,443 +1,286 @@
-const API_BASE_URL = '';
-const token = sessionStorage.getItem('ops_token');
+// ==========================================
+// Smart Clinic OS (SCS) — Clinic Details Controller
+// Auth, sidebar, toast/modal helpers come from core/ops-shared.js.
+// ==========================================
 
-if (!token) {
-  window.location.href = 'index.html';
-}
-
-// Get Tenant ID from URL query parameters
 const urlParams = new URLSearchParams(window.location.search);
 const tenantId = urlParams.get('id');
+if (!tenantId) window.location.href = 'admin_clinics.html';
 
-if (!tenantId) {
-  window.location.href = 'admin.html';
-}
-
-let currentLang = 'en';
-
-// DOM elements
-const detailsClinicName = document.getElementById('details-clinic-name');
-const detailsPlanBadge = document.getElementById('details-plan-badge');
-const detailsStatusBadge = document.getElementById('details-status-badge');
 const detailsAlertPanel = document.getElementById('details-alert-panel');
 const detailsAlertMsg = document.getElementById('details-alert-msg');
-const toastNotification = document.getElementById('toast-notification');
-const toastMessage = document.getElementById('toast-message');
+function showAlert(message) { detailsAlertMsg.innerText = message; detailsAlertPanel.classList.remove('hide'); }
 
 const detGeneralForm = document.getElementById('det-general-form');
 const detAddDoctorForm = document.getElementById('det-add-doctor-form');
-const detDeleteBtn = document.getElementById('det-delete-btn');
-const detToggleStatusBtn = document.getElementById('det-toggle-status-btn');
-const detResetPwdBtn = document.getElementById('det-reset-pwd-btn');
-const detRenewSubmitBtn = document.getElementById('det-renew-submit-btn');
-const detRenewDurationSelect = document.getElementById('det-renew-duration');
-
 const detDoctorsListContainer = document.getElementById('det-doctors-list-container');
 const detBillingTimeline = document.getElementById('det-billing-timeline');
 const detAuditTableBody = document.getElementById('det-audit-table-body');
-
-// 1. Toast & Alerts Helpers
-function showToast(message, type = 'info') {
-  const container = document.getElementById('toast-container');
-  if (!container) return;
-  
-  const toast = document.createElement('div');
-  toast.className = `toast toast-${type}`;
-  
-  let iconClass = 'fa-solid fa-circle-info';
-  if (type === 'success') iconClass = 'fa-solid fa-circle-check';
-  if (type === 'error') iconClass = 'fa-solid fa-circle-exclamation';
-  
-  toast.innerHTML = `
-    <div class="toast-icon"><i class="${iconClass}"></i></div>
-    <div class="toast-content">${message}</div>
-    <button class="toast-close" type="button">&times;</button>
-  `;
-  
-  container.appendChild(toast);
-  
-  setTimeout(() => toast.classList.add('show'), 10);
-  
-  toast.querySelector('.toast-close').addEventListener('click', () => {
-    toast.classList.remove('show');
-    setTimeout(() => toast.remove(), 300);
-  });
-  
-  setTimeout(() => {
-    if (toast.parentNode) {
-      toast.classList.remove('show');
-      setTimeout(() => toast.remove(), 300);
-    }
-  }, 4000);
-}
-
-function showLoading(btnId) {
-  const btn = document.getElementById(btnId);
-  if (!btn) return;
-  const text = btn.querySelector('.btn-text');
-  const spinner = btn.querySelector('.spinner');
-  
-  btn.disabled = true;
-  if (text) text.classList.add('hide');
-  if (spinner) spinner.classList.remove('hide');
-}
-
-function hideLoading(btnId) {
-  const btn = document.getElementById(btnId);
-  if (!btn) return;
-  const text = btn.querySelector('.btn-text');
-  const spinner = btn.querySelector('.spinner');
-  
-  btn.disabled = false;
-  if (text) text.classList.remove('hide');
-  if (spinner) spinner.classList.add('hide');
-}
-
-function showAlert(message) {
-  detailsAlertMsg.innerText = message;
-  detailsAlertPanel.classList.remove('hide');
-}
-
-// Get Current Tab from URL (default: general)
-const requestedTab = urlParams.get('tab') || 'general';
-
-// Update tab links with correct clinic ID
-const clinicIdParam = `?id=${tenantId}`;
-const tabLinks = [
-  document.getElementById('btn-tab-general'),
-  document.getElementById('btn-tab-doctors'),
-  document.getElementById('btn-tab-billing'),
-  document.getElementById('btn-tab-audit'),
-  document.getElementById('btn-tab-channels')
-];
-
-tabLinks.forEach(link => {
-  if (link && link.dataset.tab) {
-    link.href = `clinic_details.html?id=${tenantId}&tab=${link.dataset.tab}`;
-  }
-});
-
-// 2. Tab switching logic
-const tabs = [
-  { id: 'general', btn: document.getElementById('btn-tab-general'), panel: document.getElementById('tab-general') },
-  { id: 'doctors', btn: document.getElementById('btn-tab-doctors'), panel: document.getElementById('tab-doctors') },
-  { id: 'billing', btn: document.getElementById('btn-tab-billing'), panel: document.getElementById('tab-billing') },
-  { id: 'audit', btn: document.getElementById('btn-tab-audit'), panel: document.getElementById('tab-audit') },
-  { id: 'channels', btn: document.getElementById('btn-tab-channels'), panel: document.getElementById('tab-channels') }
-];
+const detToggleStatusBtn = document.getElementById('det-toggle-status-btn');
 
 let isDoctorsTabLocked = false;
+let planFeaturesMap = {};
 
-// Function to switch tabs
+// --- Tabs ---
+const tabs = ['general', 'doctors', 'billing', 'audit', 'channels'].map(id => ({
+  id, btn: document.getElementById(`btn-tab-${id}`), panel: document.getElementById(`tab-${id}`)
+}));
+
 function switchDetailsTab(tabId) {
-  // Validate tab ID
   const tabConfig = tabs.find(t => t.id === tabId);
   if (!tabConfig) return;
-  
-  // Check if doctors tab is locked
   if (tabId === 'doctors' && isDoctorsTabLocked) {
-    showToast('ميزة الأطباء المتعددين غير مفعلة للباقة الحالية. قم بترقية الباقة أو تفعيل صلاحية (Multi-Doctor) أولاً لتنشيط هذا التبويب.', 'error');
+    showToast('ميزة الأطباء المتعددين غير مفعلة للباقة الحالية. فعّل صلاحية Multi-Doctor أولاً من تبويب البيانات والصلاحيات.', 'error');
     return;
   }
-  
-  // Remove active from all tabs
-  tabs.forEach(t => {
-    t.btn.classList.remove('active');
-    t.panel.classList.add('hide');
-  });
-  
-  // Add active to selected tab
+  tabs.forEach(t => { t.btn.classList.remove('active'); t.panel.classList.add('hide'); });
   tabConfig.btn.classList.add('active');
   tabConfig.panel.classList.remove('hide');
-  
-  // Update URL
+
   const url = new URL(window.location.href);
   url.searchParams.set('tab', tabId);
   window.history.replaceState({}, '', url);
 }
+tabs.forEach(t => t.btn.addEventListener('click', (e) => { e.preventDefault(); switchDetailsTab(t.id); }));
 
-// Attach click event listeners to tabs
-tabs.forEach(tab => {
-  tab.btn.addEventListener('click', (e) => {
-    e.preventDefault();
-    switchDetailsTab(tab.id);
-  });
+function updateDoctorsTabLock(isChecked) {
+  const docTabBtn = document.getElementById('btn-tab-doctors');
+  isDoctorsTabLocked = !isChecked;
+  docTabBtn.classList.toggle('locked', isDoctorsTabLocked);
+  docTabBtn.innerHTML = isDoctorsTabLocked
+    ? '<i class="fa-solid fa-lock" style="font-size:11px; color:var(--scs-text-dim);"></i> الأطباء والكوادر'
+    : 'الأطباء والكوادر';
+}
+document.getElementById('det-feat-multi-doctor').addEventListener('change', (e) => updateDoctorsTabLock(e.target.checked));
+
+// --- Load everything ---
+async function initPage() {
+  await fetchPlansConfig();
+  await loadAllClinicData();
+  switchDetailsTab(urlParams.get('tab') || 'general');
+}
+
+async function fetchPlansConfig() {
+  try {
+    const res = await opsFetch('/admin/v1/plans');
+    const data = await res.json();
+    if (!data.success) return;
+
+    document.getElementById('det-clinic-plan').innerHTML = data.data.map(p => `<option value="${p.id}">${escapeHtml(p.name)} ($${p.price_usd}/m)</option>`).join('');
+
+    planFeaturesMap = {};
+    data.data.forEach(p => {
+      const id = p.id.toLowerCase();
+      const chip = (label, on) => `<span>${label} ${on ? '<i class="fa-solid fa-circle-check" style="color:var(--scs-success); margin-right:4px;"></i>' : '<i class="fa-solid fa-circle-xmark" style="color:var(--scs-danger); margin-right:4px;"></i>'}</span>`;
+      planFeaturesMap[id] = {
+        title: `باقة ${p.name} ($${p.price_usd}/m):`,
+        features: [
+          chip('أطباء متعددون', p.allow_multi_doctor), chip('تأمين طبي', p.allow_insurance),
+          chip('استرداد تلقائي', p.allow_refunds), chip('تنبيهات واتساب', p.allow_whatsapp),
+          chip('بوت تليجرام', p.allow_telegram), chip('تقارير تحليلات', p.allow_analytics),
+          chip('حجز صوتي ذكي', p.allow_voice_bot), chip('هوية مخصصة', p.allow_custom_branding)
+        ],
+        flags: {
+          multiDoctor: !!p.allow_multi_doctor, insurance: !!p.allow_insurance, refunds: !!p.allow_refunds,
+          whatsapp: !!p.allow_whatsapp, telegram: !!p.allow_telegram, analytics: !!p.allow_analytics,
+          voiceBot: !!p.allow_voice_bot, branding: !!p.allow_custom_branding
+        }
+      };
+    });
+  } catch (e) { console.error('Failed to load plan configurations:', e); }
+}
+
+function updatePlanInfoCard(planKey) {
+  const info = planFeaturesMap[planKey.toLowerCase()];
+  const titleEl = document.getElementById('plan-info-title');
+  const featsEl = document.getElementById('plan-info-features');
+  if (info) {
+    titleEl.innerText = info.title;
+    featsEl.innerHTML = info.features.join('');
+  } else {
+    titleEl.innerText = planKey.toUpperCase();
+    featsEl.innerHTML = '';
+  }
+}
+
+document.getElementById('det-clinic-plan').addEventListener('change', (e) => {
+  const planKey = e.target.value.toLowerCase();
+  updatePlanInfoCard(planKey);
+  const info = planFeaturesMap[planKey];
+  if (info) {
+    document.getElementById('det-feat-multi-doctor').checked = info.flags.multiDoctor;
+    document.getElementById('det-feat-insurance').checked = info.flags.insurance;
+    document.getElementById('det-feat-refunds').checked = info.flags.refunds;
+    document.getElementById('det-feat-whatsapp').checked = info.flags.whatsapp;
+    document.getElementById('det-feat-telegram').checked = info.flags.telegram;
+    document.getElementById('det-feat-analytics').checked = info.flags.analytics;
+    document.getElementById('det-feat-voice-bot').checked = info.flags.voiceBot;
+    document.getElementById('det-feat-branding').checked = info.flags.branding;
+    updateDoctorsTabLock(info.flags.multiDoctor);
+  }
 });
 
-// 3. Parallel API fetching
 async function loadAllClinicData() {
   try {
-    // 1. Fetch Tenant details
-    const res = await fetch(`${API_BASE_URL}/admin/v1/tenants/${tenantId}`, {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    
-    if (res.status === 401 || res.status === 403) {
-      sessionStorage.removeItem('ops_token');
-      window.location.href = 'index.html';
-      return;
-    }
-
+    const res = await opsFetch(`/admin/v1/tenants/${tenantId}`);
     const data = await res.json();
-    
-    if (data.success) {
-      const tenant = data.data.tenant;
-      detailsClinicName.innerText = tenant.name;
-      
-      // Update badging
-      detailsPlanBadge.innerText = tenant.subscription_plan.toUpperCase();
-      detailsPlanBadge.className = `plan-badge plan-${tenant.subscription_plan.toLowerCase()}`;
-      
-      const now = new Date();
-      const expiry = new Date(tenant.expires_at);
-      const isExpired = expiry <= now;
+    if (!data.success) { showAlert(data.error.message); return; }
 
-      // Populate Hero Summary Card
-      const heroName = document.getElementById('hero-clinic-name');
-      if (heroName) heroName.innerText = tenant.name;
+    const tenant = data.data.tenant;
+    document.getElementById('details-clinic-name').innerText = tenant.name;
+    document.getElementById('details-plan-badge').innerText = tenant.subscription_plan.toUpperCase();
+    document.getElementById('details-plan-badge').className = `plan-badge plan-${tenant.subscription_plan.toLowerCase()}`;
 
-      const heroOwner = document.getElementById('hero-owner-name');
-      if (heroOwner) heroOwner.innerText = data.data.owner ? data.data.owner.full_name : '—';
+    const now = new Date();
+    const expiry = new Date(tenant.expires_at);
+    const isExpired = expiry <= now;
 
-      const heroDays = document.getElementById('hero-days-remaining');
-      if (heroDays) {
-        const timeDiff = expiry.getTime() - now.getTime();
-        const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
-        if (isExpired) {
-          const overDays = Math.abs(daysDiff);
-          heroDays.innerHTML = `<span style="color: var(--danger);"><i class="fa-solid fa-triangle-exclamation"></i> منتهي منذ ${overDays} يوم</span>`;
-        } else {
-          heroDays.innerHTML = `<span style="color: var(--accent);"><i class="fa-solid fa-circle-check"></i> متبقي ${daysDiff} يوم</span>`;
-        }
-      }
+    document.getElementById('hero-clinic-name').innerText = tenant.name;
+    document.getElementById('hero-owner-name').innerText = data.data.owner ? data.data.owner.full_name : '—';
 
-      // Populate usage stats in Hero Card
-      const stats = tenant.usage_stats || { total_patients: 0, total_appointments: 0, whatsapp_connection: 'disconnected', storage_used_mb: 0 };
-      
-      const patientsCount = document.getElementById('hero-patients-count');
-      if (patientsCount) patientsCount.innerText = stats.total_patients;
+    const heroDays = document.getElementById('hero-days-remaining');
+    const daysDiff = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 3600 * 24));
+    heroDays.innerHTML = isExpired
+      ? `<span style="color:var(--scs-danger);"><i class="fa-solid fa-triangle-exclamation"></i> منتهي منذ ${Math.abs(daysDiff)} يوم</span>`
+      : `<span style="color:var(--primary);"><i class="fa-solid fa-circle-check"></i> متبقي ${daysDiff} يوم</span>`;
 
-      const bookingsCount = document.getElementById('hero-bookings-count');
-      if (bookingsCount) bookingsCount.innerText = stats.total_appointments;
+    const stats = tenant.usage_stats || { total_patients: 0, total_appointments: 0, whatsapp_connection: 'disconnected', storage_used_mb: 0 };
+    document.getElementById('hero-patients-count').innerText = stats.total_patients;
+    document.getElementById('hero-bookings-count').innerText = stats.total_appointments;
+    document.getElementById('hero-whatsapp-status').innerHTML = stats.whatsapp_connection === 'connected'
+      ? `<span style="color:var(--scs-success);"><i class="fa-brands fa-whatsapp"></i> متصل</span>`
+      : `<span style="color:var(--scs-danger);"><i class="fa-brands fa-whatsapp"></i> غير متصل</span>`;
+    document.getElementById('hero-storage-used').innerText = `${stats.storage_used_mb} MB`;
 
-      const waStatus = document.getElementById('hero-whatsapp-status');
-      if (waStatus) {
-        if (stats.whatsapp_connection === 'connected') {
-          waStatus.innerHTML = `<span style="color: #10b981;"><i class="fa-brands fa-whatsapp"></i> متصل</span>`;
-        } else {
-          waStatus.innerHTML = `<span style="color: #ef4444;"><i class="fa-brands fa-whatsapp"></i> غير متصل</span>`;
-        }
-      }
-
-      const storageUsed = document.getElementById('hero-storage-used');
-      if (storageUsed) storageUsed.innerText = `${stats.storage_used_mb} MB`;
-
-      if (tenant.status === 'suspended') {
-        detailsStatusBadge.innerText = 'معلق / Suspended';
-        detailsStatusBadge.className = 'status-suspended-badge';
-        if (detToggleStatusBtn) {
-          detToggleStatusBtn.innerHTML = '<i class="fa-solid fa-circle-play"></i><span class="btn-text">تنشيط الحساب</span>';
-          detToggleStatusBtn.setAttribute('data-target-status', 'active');
-        }
-      } else if (isExpired) {
-        detailsStatusBadge.innerText = 'منتهي / Expired';
-        detailsStatusBadge.className = 'status-suspended-badge';
-        if (detToggleStatusBtn) {
-          detToggleStatusBtn.innerHTML = '<i class="fa-solid fa-circle-pause"></i><span class="btn-text">تعليق الحساب</span>';
-          detToggleStatusBtn.setAttribute('data-target-status', 'suspended');
-        }
-      } else {
-        detailsStatusBadge.innerText = 'نشط / Active';
-        detailsStatusBadge.className = 'status-active-badge';
-        if (detToggleStatusBtn) {
-          detToggleStatusBtn.innerHTML = '<i class="fa-solid fa-circle-pause"></i><span class="btn-text">تعليق الحساب</span>';
-          detToggleStatusBtn.setAttribute('data-target-status', 'suspended');
-        }
-      }
-
-      // Populate form
-      document.getElementById('det-clinic-name').value = tenant.name;
-      document.getElementById('det-clinic-slug').value = tenant.slug;
-      document.getElementById('det-clinic-specialty').value = tenant.specialty || 'general';
-      document.getElementById('det-clinic-plan').value = tenant.subscription_plan;
-      updatePlanInfoCard(tenant.subscription_plan.toLowerCase());
-      document.getElementById('det-owner-email').value = data.data.owner ? data.data.owner.email : '';
-      document.getElementById('det-owner-phone').value = data.data.owner ? data.data.owner.phone : '';
-      
-      // Feature Flags
-      const multiDocAllowed = !!tenant.allow_multi_doctor;
-      document.getElementById('det-feat-multi-doctor').checked = multiDocAllowed;
-      document.getElementById('det-feat-insurance').checked = !!tenant.allow_insurance;
-      document.getElementById('det-feat-refunds').checked = !!tenant.allow_refunds;
-      document.getElementById('det-feat-whatsapp').checked = !!tenant.allow_whatsapp;
-      document.getElementById('det-feat-telegram').checked = !!tenant.allow_telegram;
-      document.getElementById('det-feat-analytics').checked = !!tenant.allow_analytics;
-      document.getElementById('det-feat-voice-bot').checked = !!tenant.allow_voice_bot;
-      document.getElementById('det-feat-branding').checked = !!tenant.allow_custom_branding;
-
-      // Initialize Doctors tab locking status
-      const docTabBtn = document.getElementById('btn-tab-doctors');
-      if (!multiDocAllowed) {
-        isDoctorsTabLocked = true;
-        docTabBtn.innerHTML = '<i class="fa-solid fa-lock" style="margin-left: 6px; font-size: 11px; color: var(--text-muted);"></i>الأطباء والكوادر';
-        docTabBtn.style.opacity = '0.6';
-        docTabBtn.style.cursor = 'not-allowed';
-      } else {
-        isDoctorsTabLocked = false;
-        docTabBtn.innerHTML = 'الأطباء والكوادر';
-        docTabBtn.style.opacity = '1';
-        docTabBtn.style.cursor = 'pointer';
-      }
-
-      if (isExpired) {
-        showAlert('انتبه: اشتراك هذه العيادة منتهي حالياً. يرجى تجديد الاشتراك لتفادي توقف الخدمة للعيادة.');
-      }
+    const statusBadge = document.getElementById('details-status-badge');
+    if (tenant.status === 'suspended') {
+      statusBadge.innerText = 'معلق'; statusBadge.className = 'status-suspended-badge';
+      detToggleStatusBtn.innerHTML = '<i class="fa-solid fa-circle-play"></i><span class="btn-text">تنشيط الحساب</span>';
+      detToggleStatusBtn.setAttribute('data-target-status', 'active');
+    } else if (isExpired) {
+      statusBadge.innerText = 'منتهي'; statusBadge.className = 'status-suspended-badge';
+      detToggleStatusBtn.innerHTML = '<i class="fa-solid fa-circle-pause"></i><span class="btn-text">تعليق الحساب</span>';
+      detToggleStatusBtn.setAttribute('data-target-status', 'suspended');
+      showAlert('انتبه: اشتراك هذه العيادة منتهي حالياً. يرجى تجديد الاشتراك لتفادي توقف الخدمة.');
     } else {
-      showAlert(data.error.message);
-      return;
+      statusBadge.innerText = 'نشط'; statusBadge.className = 'status-active-badge';
+      detToggleStatusBtn.innerHTML = '<i class="fa-solid fa-circle-pause"></i><span class="btn-text">تعليق الحساب</span>';
+      detToggleStatusBtn.setAttribute('data-target-status', 'suspended');
     }
 
-    // Load subparts
+    document.getElementById('det-clinic-name').value = tenant.name;
+    document.getElementById('det-clinic-slug').value = tenant.slug;
+    document.getElementById('det-clinic-specialty').value = tenant.specialty || 'general';
+    document.getElementById('det-clinic-plan').value = tenant.subscription_plan;
+    updatePlanInfoCard(tenant.subscription_plan.toLowerCase());
+    document.getElementById('det-owner-email').value = data.data.owner ? data.data.owner.email : '';
+    document.getElementById('det-owner-phone').value = data.data.owner ? data.data.owner.phone : '';
+
+    const multiDocAllowed = !!tenant.allow_multi_doctor;
+    document.getElementById('det-feat-multi-doctor').checked = multiDocAllowed;
+    document.getElementById('det-feat-insurance').checked = !!tenant.allow_insurance;
+    document.getElementById('det-feat-refunds').checked = !!tenant.allow_refunds;
+    document.getElementById('det-feat-whatsapp').checked = !!tenant.allow_whatsapp;
+    document.getElementById('det-feat-telegram').checked = !!tenant.allow_telegram;
+    document.getElementById('det-feat-analytics').checked = !!tenant.allow_analytics;
+    document.getElementById('det-feat-voice-bot').checked = !!tenant.allow_voice_bot;
+    document.getElementById('det-feat-branding').checked = !!tenant.allow_custom_branding;
+    updateDoctorsTabLock(multiDocAllowed);
+
     loadDetailsDoctorsList();
     loadDetailsBillingHistory();
     loadDetailsAuditLogs();
     loadDetailsChannelSettings();
-
   } catch (error) {
     showAlert('حدث خطأ في الاتصال بالخادم أثناء جلب بيانات العيادة.');
   }
 }
 
-// Fetch Doctors list
 async function loadDetailsDoctorsList() {
   try {
-    const res = await fetch(`${API_BASE_URL}/admin/v1/tenants/${tenantId}/doctors`, {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+    const res = await opsFetch(`/admin/v1/tenants/${tenantId}/doctors`);
     const data = await res.json();
-    if (data.success) {
-      if (data.data.length === 0) {
-        detDoctorsListContainer.innerHTML = '<p class="text-center text-muted" style="padding: 15px 0;">لا يوجد أطباء مسجلين بالعيادة حالياً.</p>';
-        return;
-      }
-      
-      detDoctorsListContainer.innerHTML = '';
-      data.data.forEach(doc => {
-        const card = document.createElement('div');
-        card.className = 'doctor-card';
-        card.innerHTML = `
-          <div class="doctor-info-box">
-            <div class="doctor-avatar-circle"><i class="fa-solid fa-user-doctor"></i></div>
-            <div>
-              <div class="doctor-details-name">${doc.full_name}</div>
-              <div class="doctor-details-spec">${doc.specialty}</div>
-            </div>
-          </div>
-          <span style="font-size: 11px; font-weight: bold; color: var(--primary); background: rgba(37,99,235,0.1); padding: 2px 8px; border-radius: 4px;">نشط</span>
-        `;
-        detDoctorsListContainer.appendChild(card);
-      });
+    if (!data.success) return;
+    if (data.data.length === 0) {
+      detDoctorsListContainer.innerHTML = '<p style="text-align:center; color:var(--scs-text-muted); padding:15px 0;">لا يوجد أطباء مسجلين بالعيادة حالياً.</p>';
+      return;
     }
+    detDoctorsListContainer.innerHTML = data.data.map(doc => `
+      <div class="doctor-card">
+        <div class="doctor-info-box">
+          <div class="doctor-avatar-circle"><i class="fa-solid fa-user-doctor"></i></div>
+          <div><div class="doctor-details-name">${escapeHtml(doc.full_name)}</div><div class="doctor-details-spec">${escapeHtml(doc.specialty || '—')}</div></div>
+        </div>
+        <span class="status-active-badge" style="font-size:11px;">نشط</span>
+      </div>`).join('');
   } catch (e) {
-    detDoctorsListContainer.innerHTML = '<p class="text-center text-danger">فشل تحميل الأطباء</p>';
+    detDoctorsListContainer.innerHTML = '<p style="text-align:center; color:var(--scs-danger);">فشل تحميل الأطباء</p>';
   }
 }
 
-// Fetch billing history timeline
+const billingActionLabels = { created: 'إنشاء عيادة', extended: 'تمديد اشتراك', upgraded: 'ترقية باقة', renewed: 'تجديد باقة' };
+
 async function loadDetailsBillingHistory() {
   try {
-    const res = await fetch(`${API_BASE_URL}/admin/v1/tenants/${tenantId}/subscription-history`, {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+    const res = await opsFetch(`/admin/v1/tenants/${tenantId}/subscription-history`);
     const data = await res.json();
-    if (data.success) {
-      if (data.data.length === 0) {
-        detBillingTimeline.innerHTML = '<p class="text-center text-muted" style="padding: 15px 0;">لا يوجد سجل اشتراكات لهذه العيادة.</p>';
-        return;
-      }
-      
-      detBillingTimeline.innerHTML = '';
-      data.data.forEach(item => {
-        const itemEl = document.createElement('div');
-        itemEl.className = 'timeline-item';
-        
-        const dateStr = new Date(item.created_at).toLocaleString('ar-EG');
-        const oldPlan = item.old_plan ? `<span class="plan-badge plan-${item.old_plan.toLowerCase()}">${item.old_plan.toUpperCase()}</span>` : '—';
-        const newPlan = `<span class="plan-badge plan-${item.new_plan.toLowerCase()}">${item.new_plan.toUpperCase()}</span>`;
-        const actionText = { created: 'إنشاء عيادة', extended: 'تمديد اشتراك', upgraded: 'ترقية باقة', renewed: 'تجديد باقة' }[item.action] || item.action;
-
-        itemEl.innerHTML = `
+    if (!data.success) return;
+    if (data.data.length === 0) {
+      detBillingTimeline.innerHTML = '<p style="text-align:center; color:var(--scs-text-muted); padding:15px 0;">لا يوجد سجل اشتراكات لهذه العيادة.</p>';
+      return;
+    }
+    detBillingTimeline.innerHTML = data.data.map(item => {
+      const oldPlan = item.old_plan ? `<span class="plan-badge plan-${item.old_plan.toLowerCase()}">${item.old_plan.toUpperCase()}</span>` : '—';
+      const newPlan = `<span class="plan-badge plan-${item.new_plan.toLowerCase()}">${item.new_plan.toUpperCase()}</span>`;
+      return `
+        <div class="timeline-item">
           <div class="timeline-badge"></div>
           <div class="timeline-content">
             <div class="timeline-header">
-              <span class="timeline-action">${actionText.toUpperCase()}</span>
-              <span class="timeline-date">${dateStr}</span>
+              <span class="timeline-action">${(billingActionLabels[item.action] || item.action).toUpperCase()}</span>
+              <span class="timeline-date">${new Date(item.created_at).toLocaleString('ar-EG')}</span>
             </div>
-            <div class="timeline-body">
-              <p style="margin-bottom: 3px;"><strong>الخطة:</strong> ${oldPlan} ➜ ${newPlan}</p>
-              <p style="margin-bottom: 3px;"><strong>تاريخ الانتهاء:</strong> ${new Date(item.new_expires_at).toLocaleDateString()}</p>
-              <p style="margin-bottom: 0;"><strong>السبب:</strong> ${item.reason || '—'}</p>
-            </div>
-            <div class="timeline-operator">By: ${item.operator_name}</div>
+            <p><strong>الخطة:</strong> ${oldPlan} ➜ ${newPlan}</p>
+            <p><strong>تاريخ الانتهاء:</strong> ${new Date(item.new_expires_at).toLocaleDateString('ar-EG')}</p>
+            <p><strong>السبب:</strong> ${escapeHtml(item.reason || '—')}</p>
+            <div class="timeline-operator">بواسطة: ${escapeHtml(item.operator_name)}</div>
           </div>
-        `;
-        detBillingTimeline.appendChild(itemEl);
-      });
-    }
+        </div>`;
+    }).join('');
   } catch (e) {
-    detBillingTimeline.innerHTML = '<p class="text-center text-danger">فشل تحميل سجل الاشتراكات</p>';
+    detBillingTimeline.innerHTML = '<p style="text-align:center; color:var(--scs-danger);">فشل تحميل سجل الاشتراكات</p>';
   }
 }
 
-// Fetch audit logs
+const auditActionLabels = {
+  'tenant.create': 'إنشاء عيادة', 'tenant.deactivate': 'تعليق حساب', 'tenant.activate': 'تنشيط حساب',
+  'tenant.update': 'تعديل عيادة', 'tenant.update_features': 'تعديل صلاحيات', 'tenant.delete': 'حذف عيادة',
+  'tenant.add_doctor': 'إضافة طبيب', 'subscription.change': 'تغيير اشتراك'
+};
+
 async function loadDetailsAuditLogs() {
   try {
-    const res = await fetch(`${API_BASE_URL}/admin/v1/audit-logs`, {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+    const res = await opsFetch('/admin/v1/audit-logs');
     const data = await res.json();
-    if (data.success) {
-      const filtered = data.data.filter(log => log.target_id === tenantId || (log.details && log.details.includes(tenantId)));
-      
-      if (filtered.length === 0) {
-        detAuditTableBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">لا توجد عمليات مسجلة لهذه العيادة.</td></tr>';
-        return;
-      }
-      
-      detAuditTableBody.innerHTML = '';
-      filtered.forEach(log => {
-        const row = document.createElement('tr');
-        const dateStr = new Date(log.created_at).toLocaleString('ar-EG');
-        
-        let actionLabel = log.action;
-        if (log.action === 'tenant.create') actionLabel = 'إنشاء عيادة';
-        else if (log.action === 'tenant.deactivate') actionLabel = 'تعليق حساب';
-        else if (log.action === 'tenant.activate') actionLabel = 'تنشيط حساب';
-        else if (log.action === 'tenant.update') actionLabel = 'تعديل عيادة';
-        else if (log.action === 'tenant.update_features') actionLabel = 'تعديل صلاحيات';
-        else if (log.action === 'tenant.delete') actionLabel = 'حذف عيادة';
-        else if (log.action === 'tenant.add_doctor') actionLabel = 'إضافة طبيب';
-        else if (log.action === 'subscription.change') actionLabel = 'تغيير اشتراك';
-
-        row.innerHTML = `
-          <td><strong>${log.operator_name}</strong></td>
-          <td><span class="plan-badge plan-pro" style="font-size: 10px;">${actionLabel}</span></td>
-          <td><span class="audit-details-code" title="${log.details || ''}">${log.details || '—'}</span></td>
-          <td><small>${dateStr}</small></td>
-        `;
-        detAuditTableBody.appendChild(row);
-      });
+    if (!data.success) return;
+    const filtered = data.data.filter(log => log.target_id === tenantId || (log.details && log.details.includes(tenantId)));
+    if (filtered.length === 0) {
+      detAuditTableBody.innerHTML = '<tr><td colspan="4" class="text-center" style="color:var(--scs-text-muted);">لا توجد عمليات مسجلة لهذه العيادة.</td></tr>';
+      return;
     }
+    detAuditTableBody.innerHTML = filtered.map(log => `
+      <tr>
+        <td><strong>${escapeHtml(log.operator_name)}</strong></td>
+        <td><span class="plan-badge plan-pro" style="font-size:10px;">${auditActionLabels[log.action] || log.action}</span></td>
+        <td><span class="audit-details-code" title="${escapeHtml(log.details || '')}">${escapeHtml(log.details || '—')}</span></td>
+        <td><small>${new Date(log.created_at).toLocaleString('ar-EG')}</small></td>
+      </tr>`).join('');
   } catch (e) {
-    detAuditTableBody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">فشل تحميل سجل العمليات</td></tr>';
+    detAuditTableBody.innerHTML = '<tr><td colspan="4" class="text-center" style="color:var(--scs-danger);">فشل تحميل سجل العمليات</td></tr>';
   }
 }
 
-// 4. Form Submissions and updates
+// --- Form submissions ---
 detGeneralForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   showLoading('det-save-btn');
@@ -449,7 +292,6 @@ detGeneralForm.addEventListener('submit', async (e) => {
     email: document.getElementById('det-owner-email').value,
     phone: document.getElementById('det-owner-phone').value
   };
-
   const featuresPayload = {
     allow_multi_doctor: document.getElementById('det-feat-multi-doctor').checked,
     allow_insurance: document.getElementById('det-feat-insurance').checked,
@@ -462,29 +304,16 @@ detGeneralForm.addEventListener('submit', async (e) => {
   };
 
   try {
-    // 1. Update details
-    const res = await fetch(`${API_BASE_URL}/admin/v1/tenants/${tenantId}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(payload)
-    });
+    const res = await opsFetch(`/admin/v1/tenants/${tenantId}`, { method: 'PUT', body: JSON.stringify(payload) });
     const data = await res.json();
-
     if (data.success) {
-      // 2. Update features
-      await fetch(`${API_BASE_URL}/admin/v1/tenants/${tenantId}/features`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(featuresPayload)
-      });
-
-      showToast('تم حفظ التعديلات بنجاح!', 'success');
+      const featRes = await opsFetch(`/admin/v1/tenants/${tenantId}/features`, { method: 'PUT', body: JSON.stringify(featuresPayload) });
+      const featData = await featRes.json();
+      if (featData.success) {
+        showToast('تم حفظ التعديلات بنجاح!', 'success');
+      } else {
+        showToast('تم حفظ البيانات، لكن فشل حفظ الصلاحيات: ' + (featData.error?.message || ''), 'error');
+      }
       loadAllClinicData();
     } else {
       showToast(data.error.message, 'error');
@@ -492,36 +321,25 @@ detGeneralForm.addEventListener('submit', async (e) => {
   } catch (error) {
     showToast('خطأ في الاتصال بالشبكة.', 'error');
   } finally {
-    hideLoading('det-save-btn');
+    hideLoading('det-save-btn', 'حفظ التغييرات والصلاحيات');
   }
 });
 
-// Add new doctor
 detAddDoctorForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const nameInput = document.getElementById('det-doc-name');
   const specInput = document.getElementById('det-doc-spec');
-  
-  const payload = {
-    full_name: nameInput.value.trim(),
-    specialty: specInput.value.trim()
-  };
 
   showLoading('det-add-doc-btn');
   try {
-    const res = await fetch(`${API_BASE_URL}/admin/v1/tenants/${tenantId}/doctors`, {
+    const res = await opsFetch(`/admin/v1/tenants/${tenantId}/doctors`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ full_name: nameInput.value.trim(), specialty: specInput.value.trim() })
     });
     const data = await res.json();
     if (data.success) {
       showToast('تم إضافة الطبيب بنجاح للعيادة!', 'success');
-      nameInput.value = '';
-      specInput.value = '';
+      nameInput.value = ''; specInput.value = '';
       loadDetailsDoctorsList();
       loadDetailsAuditLogs();
     } else {
@@ -530,225 +348,73 @@ detAddDoctorForm.addEventListener('submit', async (e) => {
   } catch (error) {
     showToast('خطأ في الاتصال بالشبكة.', 'error');
   } finally {
-    hideLoading('det-add-doc-btn');
+    hideLoading('det-add-doc-btn', 'تأكيد إضافة الطبيب');
   }
 });
 
-// Delete Clinic
-detDeleteBtn.addEventListener('click', async () => {
-  const confirmMsg = 'تحذير نهائي: هل أنت متأكد من حذف هذه العيادة بالكامل؟ سيؤدي ذلك لمسح كافة جداول المواعيد وملفات المرضى وقاعدة البيانات بالكامل ولا يمكن استرجاعها.';
+document.getElementById('det-delete-btn').addEventListener('click', async () => {
+  const confirmMsg = 'تحذير: هل أنت متأكد من حذف هذه العيادة نهائياً؟ سيتم تعطيل الحساب وحذف مستخدميه الإداريين، ولا يمكن التراجع عن هذا الإجراء.';
   if (!confirm(confirmMsg)) return;
 
   showLoading('det-delete-btn');
   try {
-    const res = await fetch(`${API_BASE_URL}/admin/v1/tenants/${tenantId}`, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+    const res = await opsFetch(`/admin/v1/tenants/${tenantId}`, { method: 'DELETE' });
     const data = await res.json();
     if (data.success) {
-      alert('تم حذف العيادة بنجاح من المنصة.');
-      window.location.href = 'admin.html';
+      showToast('تم حذف العيادة بنجاح من المنصة.', 'success');
+      setTimeout(() => { window.location.href = 'admin_clinics.html'; }, 1200);
     } else {
       showToast(data.error.message, 'error');
+      hideLoading('det-delete-btn', null);
     }
   } catch (error) {
     showToast('خطأ في الاتصال بالشبكة.', 'error');
-  } finally {
-    hideLoading('det-delete-btn');
+    hideLoading('det-delete-btn', null);
   }
 });
 
-// 5. Subscription Plan Features Indicator & Auto-flags logic
-const planInfoTitle = document.getElementById('plan-info-title');
-const planInfoFeatures = document.getElementById('plan-info-features');
+detToggleStatusBtn.addEventListener('click', async () => {
+  const targetStatus = detToggleStatusBtn.getAttribute('data-target-status');
+  const confirmMsg = targetStatus === 'suspended'
+    ? 'هل أنت متأكد من تعليق حساب العيادة؟ سيتوقف البوت عن استقبال حجوزات جديدة لحين إعادة التنشيط.'
+    : 'هل أنت متأكد من تنشيط حساب العيادة؟';
+  if (!confirm(confirmMsg)) return;
 
-let planFeaturesMap = {};
-
-async function fetchPlansConfig() {
   try {
-    const res = await fetch(`${API_BASE_URL}/admin/v1/plans`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+    const res = await opsFetch(`/admin/v1/tenants/${tenantId}/status`, { method: 'PUT', body: JSON.stringify({ status: targetStatus }) });
     const data = await res.json();
-    if (data.success && data.data) {
-      const detPlanSelect = document.getElementById('det-clinic-plan');
-      if (detPlanSelect) {
-        detPlanSelect.innerHTML = data.data.map(p => `<option value="${p.id}">${p.name} ($${p.price_usd}/m)</option>`).join('');
-      }
-      
-      planFeaturesMap = {};
-      data.data.forEach(p => {
-        const id = p.id.toLowerCase();
-        planFeaturesMap[id] = {
-          title: `باقة ${p.name} ($${p.price_usd}/m):`,
-          features: [
-            `أطباء متعددون ${p.allow_multi_doctor ? '<i class="fa-solid fa-circle-check text-success" style="margin-right: 4px;"></i>' : '<i class="fa-solid fa-circle-xmark text-danger" style="margin-right: 4px;"></i>'}`,
-            `تأمين طبي ${p.allow_insurance ? '<i class="fa-solid fa-circle-check text-success" style="margin-right: 4px;"></i>' : '<i class="fa-solid fa-circle-xmark text-danger" style="margin-right: 4px;"></i>'}`,
-            `استرداد تلقائي ${p.allow_refunds ? '<i class="fa-solid fa-circle-check text-success" style="margin-right: 4px;"></i>' : '<i class="fa-solid fa-circle-xmark text-danger" style="margin-right: 4px;"></i>'}`,
-            `تنبيهات واتساب ${p.allow_whatsapp ? '<i class="fa-solid fa-circle-check text-success" style="margin-right: 4px;"></i>' : '<i class="fa-solid fa-circle-xmark text-danger" style="margin-right: 4px;"></i>'}`,
-            `بوت تليجرام ${p.allow_telegram ? '<i class="fa-solid fa-circle-check text-success" style="margin-right: 4px;"></i>' : '<i class="fa-solid fa-circle-xmark text-danger" style="margin-right: 4px;"></i>'}`,
-            `تقارير تحليلات ${p.allow_analytics ? '<i class="fa-solid fa-circle-check text-success" style="margin-right: 4px;"></i>' : '<i class="fa-solid fa-circle-xmark text-danger" style="margin-right: 4px;"></i>'}`,
-            `حجز صوتي ذكي ${p.allow_voice_bot ? '<i class="fa-solid fa-circle-check text-success" style="margin-right: 4px;"></i>' : '<i class="fa-solid fa-circle-xmark text-danger" style="margin-right: 4px;"></i>'}`,
-            `هوية مخصصة ${p.allow_custom_branding ? '<i class="fa-solid fa-circle-check text-success" style="margin-right: 4px;"></i>' : '<i class="fa-solid fa-circle-xmark text-danger" style="margin-right: 4px;"></i>'}`
-          ],
-          flags: {
-            multiDoctor: !!p.allow_multi_doctor,
-            insurance: !!p.allow_insurance,
-            refunds: !!p.allow_refunds,
-            whatsapp: !!p.allow_whatsapp,
-            telegram: !!p.allow_telegram,
-            analytics: !!p.allow_analytics,
-            voiceBot: !!p.allow_voice_bot,
-            branding: !!p.allow_custom_branding
-          }
-        };
-      });
-    }
+    if (data.success) { showToast('تم تحديث حالة العيادة بنجاح.', 'success'); loadAllClinicData(); }
+    else showToast(data.error.message, 'error');
+  } catch (e) { showToast('خطأ في الاتصال بالخادم.', 'error'); }
+});
+
+document.getElementById('det-reset-pwd-btn').addEventListener('click', async () => {
+  if (!confirm('هل أنت متأكد من إعادة تعيين كلمة مرور طبيب العيادة المالك؟ سيتم توليد كلمة مرور جديدة وإرسالها له بالبريد الإلكتروني.')) return;
+
+  try {
+    const res = await opsFetch(`/admin/v1/tenants/${tenantId}/reset-password`, { method: 'POST' });
+    const data = await res.json();
+    if (data.success) showToast('تمت إعادة تعيين كلمة المرور، وأُرسلت للطبيب عبر البريد الإلكتروني.', 'success');
+    else showToast(data.error.message, 'error');
+  } catch (e) { showToast('خطأ في الاتصال بالخادم.', 'error'); }
+});
+
+document.getElementById('det-renew-submit-btn').addEventListener('click', async () => {
+  const months = document.getElementById('det-renew-duration').value;
+  showLoading('det-renew-submit-btn');
+  try {
+    const res = await opsFetch(`/admin/v1/tenants/${tenantId}/subscription`, { method: 'PUT', body: JSON.stringify({ months_to_extend: months }) });
+    const data = await res.json();
+    if (data.success) { showToast('تم تجديد الاشتراك وتمديده بنجاح.', 'success'); loadAllClinicData(); }
+    else showToast(data.error.message, 'error');
   } catch (e) {
-    console.error('Failed to load dynamic plan configurations:', e);
-  }
-}
-
-function updatePlanInfoCard(planKey) {
-  const planInfo = planFeaturesMap[planKey.toLowerCase()];
-  if (planInfo) {
-    planInfoTitle.innerText = planInfo.title;
-    planInfoFeatures.innerHTML = planInfo.features.map(f => `<span>${f}</span>`).join('');
-  } else {
-    planInfoTitle.innerText = planKey.toUpperCase();
-    planInfoFeatures.innerHTML = '';
-  }
-}
-
-function updateDoctorsTabLock(isChecked) {
-  const docTabBtn = document.getElementById('btn-tab-doctors');
-  if (!isChecked) {
-    isDoctorsTabLocked = true;
-    docTabBtn.innerHTML = '<i class="fa-solid fa-lock" style="margin-left: 6px; font-size: 11px; color: var(--text-muted);"></i>الأطباء والكوادر';
-    docTabBtn.style.opacity = '0.6';
-    docTabBtn.style.cursor = 'not-allowed';
-  } else {
-    isDoctorsTabLocked = false;
-    docTabBtn.innerHTML = 'الأطباء والكوادر';
-    docTabBtn.style.opacity = '1';
-    docTabBtn.style.cursor = 'pointer';
-  }
-}
-
-// Event listener to update doctors tab when multi-doctor flag changes manually
-document.getElementById('det-feat-multi-doctor').addEventListener('change', (e) => {
-  updateDoctorsTabLock(e.target.checked);
-});
-
-// Event listener to auto-toggle features when plan changes
-document.getElementById('det-clinic-plan').addEventListener('change', (e) => {
-  const planKey = e.target.value.toLowerCase();
-  updatePlanInfoCard(planKey);
-  
-  const planInfo = planFeaturesMap[planKey];
-  if (planInfo) {
-    document.getElementById('det-feat-multi-doctor').checked = planInfo.flags.multiDoctor;
-    document.getElementById('det-feat-insurance').checked = planInfo.flags.insurance;
-    document.getElementById('det-feat-refunds').checked = planInfo.flags.refunds;
-    document.getElementById('det-feat-whatsapp').checked = planInfo.flags.whatsapp;
-    document.getElementById('det-feat-telegram').checked = planInfo.flags.telegram;
-    document.getElementById('det-feat-analytics').checked = planInfo.flags.analytics;
-    document.getElementById('det-feat-voice-bot').checked = planInfo.flags.voiceBot;
-    document.getElementById('det-feat-branding').checked = planInfo.flags.branding;
-    
-    // Update locking status
-    updateDoctorsTabLock(planInfo.flags.multiDoctor);
+    showToast('خطأ في الاتصال بالخادم.', 'error');
+  } finally {
+    hideLoading('det-renew-submit-btn', 'تجديد الاشتراك');
   }
 });
-// Toggle clinic status (Suspend/Reactivate)
-if (detToggleStatusBtn) {
-  detToggleStatusBtn.addEventListener('click', async () => {
-    const targetStatus = detToggleStatusBtn.getAttribute('data-target-status');
-    const confirmMsg = targetStatus === 'suspended'
-      ? 'هل أنت متأكد من تعليق حساب العيادة؟ لن يتمكن الكادر الطبي من الدخول.'
-      : 'هل أنت متأكد من تنشيط حساب العيادة؟';
-    
-    if (!confirm(confirmMsg)) return;
 
-    try {
-      const res = await fetch(`${API_BASE_URL}/admin/v1/tenants/${tenantId}/status`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ status: targetStatus })
-      });
-      const data = await res.json();
-      if (data.success) {
-        showToast('تم تحديث حالة العيادة بنجاح.', 'success');
-        loadAllClinicData();
-      } else {
-        showToast(data.error.message, 'error');
-      }
-    } catch (e) {
-      showToast('خطأ في الاتصال بالخادم.', 'error');
-    }
-  });
-}
-
-// Reset Doctor Password
-if (detResetPwdBtn) {
-  detResetPwdBtn.addEventListener('click', async () => {
-    const confirmMsg = 'هل أنت متأكد من إعادة تعيين كلمة المرور لطبيب العيادة المالك؟ سيتم توليد رابط جديد.';
-    
-    if (!confirm(confirmMsg)) return;
-
-    try {
-      const res = await fetch(`${API_BASE_URL}/admin/v1/tenants/${tenantId}/reset-password`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await res.json();
-      if (data.success) {
-        showToast('تمت إعادة التعيين بنجاح. تم طباعة الرابط في Console الخادم.', 'success');
-        alert(`رابط إعادة التعيين:\n${data.data.reset_link}`);
-      } else {
-        showToast(data.error.message, 'error');
-      }
-    } catch (e) {
-      showToast('خطأ في الاتصال بالخادم.', 'error');
-    }
-  });
-}
-
-// Renew Subscription
-if (detRenewSubmitBtn) {
-  detRenewSubmitBtn.addEventListener('click', async () => {
-    const months = detRenewDurationSelect.value;
-    showLoading('det-renew-submit-btn');
-
-    try {
-      const res = await fetch(`${API_BASE_URL}/admin/v1/tenants/${tenantId}/subscription`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ months_to_extend: months })
-      });
-      const data = await res.json();
-      hideLoading('det-renew-submit-btn');
-      if (data.success) {
-        showToast('تم تجديد الاشتراك وتمديده بنجاح.', 'success');
-        loadAllClinicData();
-      } else {
-        showToast(data.error.message, 'error');
-      }
-    } catch (e) {
-      hideLoading('det-renew-submit-btn');
-      showToast('خطأ في الاتصال بالخادم.', 'error');
-    }
-  });
-}
-
-// ═══ Channel Integration API Settings (Super Admin Only) ═══
+// --- Channel settings (calls the clinic-app server directly, not the ops API) ---
 const CLINIC_API_BASE = 'http://localhost:3001';
 
 async function loadDetailsChannelSettings() {
@@ -761,21 +427,18 @@ async function loadDetailsChannelSettings() {
       document.getElementById('det-wa-token').value = d.whatsapp.access_token || '';
       document.getElementById('det-wa-webhook').textContent = d.whatsapp.webhook_url || '';
       document.getElementById('det-wa-verify').textContent = d.whatsapp.verify_token || '';
-
       document.getElementById('det-tg-token').value = d.telegram.bot_token || '';
       document.getElementById('det-tg-username').value = d.telegram.bot_username || '';
     }
-  } catch (e) { console.error('Failed to load details channel settings:', e); }
+  } catch (e) { console.error('Failed to load channel settings:', e); }
 }
 
 async function saveAdminWhatsapp() {
   const btn = document.getElementById('btn-save-det-wa');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري الحفظ...';
+  btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري الحفظ...';
   try {
     const res = await fetch(`${CLINIC_API_BASE}/v1/settings/channels/whatsapp`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         phone_number_id: document.getElementById('det-wa-phone-id').value,
         business_account_id: document.getElementById('det-wa-business-id').value,
@@ -784,73 +447,42 @@ async function saveAdminWhatsapp() {
     }).then(r => r.json());
     if (res.success) showToast('تم حفظ إعدادات واتساب بنجاح!', 'success');
   } catch (e) { showToast('خطأ في الاتصال بالخادم', 'error'); }
-  btn.disabled = false;
-  btn.innerHTML = '<i class="fa-solid fa-save"></i> حفظ إعدادات واتساب';
+  btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-save"></i> حفظ إعدادات واتساب';
 }
 
 async function testAdminWhatsapp() {
   const btn = document.getElementById('btn-test-det-wa');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري الاختبار...';
-  
+  btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري الاختبار...';
   await saveAdminWhatsapp();
-
   try {
-    const res = await fetch(`${CLINIC_API_BASE}/v1/settings/channels/whatsapp/test`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
-    }).then(r => r.json());
-
-    if (res.success) {
-      showToast(res.data.message, 'success');
-    } else {
-      showToast(res.error?.message || 'فشل الاتصال', 'error');
-    }
+    const res = await fetch(`${CLINIC_API_BASE}/v1/settings/channels/whatsapp/test`, { method: 'POST', headers: { 'Content-Type': 'application/json' } }).then(r => r.json());
+    if (res.success) showToast(res.data.message, 'success'); else showToast(res.error?.message || 'فشل الاتصال', 'error');
   } catch (e) { showToast('خطأ في الاتصال بالخادم', 'error'); }
-  btn.disabled = false;
-  btn.innerHTML = '<i class="fa-solid fa-vial"></i> اختبار اتصال الواتساب';
+  btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-vial"></i> اختبار الاتصال';
 }
 
 async function saveAdminTelegram() {
   const btn = document.getElementById('btn-save-det-tg');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري الحفظ...';
+  btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري الحفظ...';
   try {
     const res = await fetch(`${CLINIC_API_BASE}/v1/settings/channels/telegram`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        bot_token: document.getElementById('det-tg-token').value,
-        bot_username: document.getElementById('det-tg-username').value
-      })
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bot_token: document.getElementById('det-tg-token').value, bot_username: document.getElementById('det-tg-username').value })
     }).then(r => r.json());
     if (res.success) showToast('تم حفظ إعدادات تليجرام بنجاح!', 'success');
   } catch (e) { showToast('خطأ في الاتصال بالخادم', 'error'); }
-  btn.disabled = false;
-  btn.innerHTML = '<i class="fa-solid fa-save"></i> حفظ إعدادات تليجرام';
+  btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-save"></i> حفظ إعدادات تليجرام';
 }
 
 async function testAdminTelegram() {
   const btn = document.getElementById('btn-test-det-tg');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري الربط...';
-
+  btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري الربط...';
   await saveAdminTelegram();
-
   try {
-    const res = await fetch(`${CLINIC_API_BASE}/v1/settings/channels/telegram/test`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
-    }).then(r => r.json());
-
-    if (res.success) {
-      showToast(res.data.message, 'success');
-    } else {
-      showToast(res.error?.message || 'فشل الاتصال', 'error');
-    }
+    const res = await fetch(`${CLINIC_API_BASE}/v1/settings/channels/telegram/test`, { method: 'POST', headers: { 'Content-Type': 'application/json' } }).then(r => r.json());
+    if (res.success) showToast(res.data.message, 'success'); else showToast(res.error?.message || 'فشل الاتصال', 'error');
   } catch (e) { showToast('خطأ في الاتصال بالخادم', 'error'); }
-  btn.disabled = false;
-  btn.innerHTML = '<i class="fa-solid fa-link"></i> ربط وتفعيل الـ Webhook تلقائياً';
+  btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-link"></i> ربط وتفعيل الـ Webhook';
 }
 
 function copyToClipboardText(text, btnEl) {
@@ -858,23 +490,10 @@ function copyToClipboardText(text, btnEl) {
     if (btnEl) {
       const origText = btnEl.innerText;
       btnEl.innerText = 'تم النسخ!';
-      btnEl.style.background = '#10b981';
-      btnEl.style.color = 'white';
-      setTimeout(() => {
-        btnEl.innerText = origText;
-        btnEl.style.background = '';
-        btnEl.style.color = '';
-      }, 1500);
+      setTimeout(() => { btnEl.innerText = origText; }, 1500);
     }
     showToast('تم النسخ للحافظة بنجاح', 'success');
   }).catch(() => showToast('فشل النسخ', 'error'));
 }
 
-// Load everything on startup
-async function initPage() {
-  await fetchPlansConfig();
-  await loadAllClinicData();
-  // Apply the requested tab from URL
-  switchDetailsTab(requestedTab);
-}
-initPage();
+document.addEventListener('opsShellReady', initPage);
