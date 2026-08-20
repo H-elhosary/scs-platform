@@ -6,8 +6,11 @@ const db = require('../db/connection');
 const router = express.Router();
 require('dotenv').config();
 
-const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || 'your_jwt_access_secret_key_12345';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'your_jwt_refresh_secret_key_67890';
+const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET;
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
+if (!JWT_ACCESS_SECRET || !JWT_REFRESH_SECRET) {
+  throw new Error('JWT_ACCESS_SECRET / JWT_REFRESH_SECRET are not set in the environment. Refusing to start with an insecure default secret.');
+}
 const JWT_ACCESS_EXPIRY = process.env.JWT_ACCESS_EXPIRY || '15m';
 const JWT_REFRESH_EXPIRY = process.env.JWT_REFRESH_EXPIRY || '7d';
 const MOCK_OTP = process.env['2FA_MOCK_OTP'] || '123456';
@@ -60,10 +63,6 @@ router.post('/admin/v1/auth/login', async (req, res) => {
     try {
       passwordValid = await bcrypt.compare(password, admin.password_hash);
     } catch(e) {}
-
-    if (!passwordValid && (password === 'SecurePassword123!' || password === 'Test123!' || password === '123456' || password === 'admin123')) {
-      passwordValid = true;
-    }
 
     if (!passwordValid) {
       return res.status(401).json({

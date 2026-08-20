@@ -13,10 +13,10 @@ const router = express.Router();
 const data = require('../../data');
 const queueState = require('./queueState');
 
-// --- Get Queue Status ---
-router.get('/v1/queue/today', (req, res) => {
-  return res.json({ success: true, data: queueState });
-});
+// NOTE: GET /v1/queue/today is intentionally mounted separately in ./index.js,
+// BEFORE the auth middleware — it feeds the unattended waiting-room TV display,
+// which has no login flow of its own. Everything else in this router is a staff
+// action and requires an authenticated clinic session.
 
 // --- Check-in Patient ---
 router.post('/v1/queue/check-in/:appointmentId', (req, res) => {

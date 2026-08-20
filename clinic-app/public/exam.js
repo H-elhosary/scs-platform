@@ -927,10 +927,12 @@ async function saveConsultation() {
       if (res.success) {
         showToast('تم حفظ الكشف الطبي والفحص ثلاثي الأبعاد والروشتة بنجاح 🩺', 'success');
       } else {
-        showToast('تم الحفظ بنجاح', 'success');
+        showToast(res.error?.message || 'فشل حفظ الكشف الطبي. حاول مرة أخرى قبل مغادرة الصفحة.', 'error');
+        return;
       }
     } catch (e) {
-      showToast('تم حفظ الكشف والروشتة محلياً', 'success');
+      showToast('تعذر الاتصال بالخادم — لم يتم حفظ الكشف الطبي. حاول مرة أخرى.', 'error');
+      return;
     }
   } else {
     showToast('تم حفظ بيانات الكشف الطبي والفحص ثلاثي الأبعاد بنجاح 🩺', 'success');

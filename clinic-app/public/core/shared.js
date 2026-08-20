@@ -1,5 +1,22 @@
 const API_BASE = '';
 
+// Wrapper around fetch() that attaches the logged-in session token and tenant id
+// to every same-origin API call. All clinic dashboard routes now require auth —
+// pages must use this (not raw fetch) so the server can identify the caller.
+function authFetch(url, options = {}) {
+  const tenantId = localStorage.getItem('tenant_id') || '';
+  const token = localStorage.getItem('auth_token') || '';
+  return fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'x-tenant-id': tenantId,
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      ...(options.headers || {})
+    }
+  });
+}
+
 // Global shared state
 let allPatients = [];
 let allServices = [];
@@ -208,10 +225,7 @@ function highlightActiveLink() {
 // 2. Load Base Layout Stats
 async function loadBaseLayoutData() {
   try {
-    const tenantId = localStorage.getItem('tenant_id') || 'a7b3c2d1-e5f6-7a8b-9c0d-1e2f3a4b5c6d';
-    const statsRes = await fetch(`${API_BASE}/v1/dashboard/stats`, {
-      headers: { 'x-tenant-id': tenantId }
-    }).then(r => r.json());
+    const statsRes = await authFetch(`${API_BASE}/v1/dashboard/stats`).then(r => r.json());
 
     if (statsRes.success) {
       const d = statsRes.data;
@@ -261,14 +275,11 @@ async function loadBaseLayoutData() {
 // 3. Load Global resources
 async function loadGlobalData() {
   try {
-    const tenantId = localStorage.getItem('tenant_id') || 'a7b3c2d1-e5f6-7a8b-9c0d-1e2f3a4b5c6d';
-    const reqHeaders = { 'x-tenant-id': tenantId };
-
     const [pRes, sRes, whRes, dRes] = await Promise.all([
-      fetch(`${API_BASE}/v1/patients`, { headers: reqHeaders }).then(r => r.json()),
-      fetch(`${API_BASE}/v1/settings/services`, { headers: reqHeaders }).then(r => r.json()),
-      fetch(`${API_BASE}/v1/settings/working-hours`, { headers: reqHeaders }).then(r => r.json()),
-      fetch(`${API_BASE}/v1/doctors`, { headers: reqHeaders }).then(r => r.json())
+      authFetch(`${API_BASE}/v1/patients`).then(r => r.json()),
+      authFetch(`${API_BASE}/v1/settings/services`).then(r => r.json()),
+      authFetch(`${API_BASE}/v1/settings/working-hours`).then(r => r.json()),
+      authFetch(`${API_BASE}/v1/doctors`).then(r => r.json())
     ]);
     if (pRes.success) allPatients = pRes.data.patients;
     if (sRes.success) allServices = sRes.data;

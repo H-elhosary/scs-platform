@@ -11,11 +11,11 @@
     "last_tested_at": null
   },
   "telegram": {
-    "enabled": true,
-    "bot_token": "8791878209:AAHKnqb5cDmtMCVRIszTh0S09FVsoBMiR74",
-    "bot_username": "تجربة",
+    "enabled": false,
+    "bot_token": "",
+    "bot_username": "",
     "webhook_url": "https://api.smartclinic.com/webhooks/telegram/tenant-uuid-noor",
-    "status": "connected",
-    "last_tested_at": "2026-07-05T10:57:33.161Z"
+    "status": "disconnected",
+    "last_tested_at": null
   }
 }

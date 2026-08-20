@@ -3,9 +3,15 @@ node_modules/
 */node_modules/
 */*/node_modules/
 
-# Environment Variables
+# Environment Variables — real .env files must never be committed, only .env.example templates
+.env
+*/.env
+*/*/.env
 .env.local
 .env.*.local
+!.env.example
+!*/.env.example
+!*/*/.env.example
 
 # Logs
 logs/

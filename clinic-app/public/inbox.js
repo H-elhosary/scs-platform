@@ -24,7 +24,7 @@ function initInbox() {
 async function loadConversations(isPolling = false) {
   try {
     const tenantId = localStorage.getItem('tenant_id') || 'a7b3c2d1-e5f6-7a8b-9c0d-1e2f3a4b5c6d';
-    const res = await fetch(`${API_BASE}/v1/inbox/conversations`, {
+    const res = await authFetch(`${API_BASE}/v1/inbox/conversations`, {
       headers: { 'x-tenant-id': tenantId }
     }).then(r => r.json());
 
@@ -140,7 +140,7 @@ function renderConversationsList(isPolling = false) {
 async function openChat(convId) {
   try {
     const tenantId = localStorage.getItem('tenant_id') || 'a7b3c2d1-e5f6-7a8b-9c0d-1e2f3a4b5c6d';
-    const res = await fetch(`${API_BASE}/v1/inbox/conversations/${convId}/read`, {
+    const res = await authFetch(`${API_BASE}/v1/inbox/conversations/${convId}/read`, {
       method: 'POST',
       headers: { 'x-tenant-id': tenantId }
     }).then(r => r.json());
@@ -304,7 +304,7 @@ async function sendMessage(convId) {
 
   try {
     const tenantId = localStorage.getItem('tenant_id') || 'a7b3c2d1-e5f6-7a8b-9c0d-1e2f3a4b5c6d';
-    const res = await fetch(`${API_BASE}/v1/inbox/conversations/${convId}/messages`, {
+    const res = await authFetch(`${API_BASE}/v1/inbox/conversations/${convId}/messages`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -327,7 +327,7 @@ async function sendMessage(convId) {
 async function toggleBot(convId, status) {
   try {
     const tenantId = localStorage.getItem('tenant_id') || 'a7b3c2d1-e5f6-7a8b-9c0d-1e2f3a4b5c6d';
-    const res = await fetch(`${API_BASE}/v1/inbox/conversations/${convId}/bot`, {
+    const res = await authFetch(`${API_BASE}/v1/inbox/conversations/${convId}/bot`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

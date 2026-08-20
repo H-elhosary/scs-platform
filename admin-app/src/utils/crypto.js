@@ -1,7 +1,10 @@
 const crypto = require('crypto');
 
-// Standard encryption key from environment variable (or dummy for mock fallback)
-const ENCRYPTION_KEY = process.env.MEDICAL_ENCRYPTION_KEY || 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6'; // Must be 32 bytes
+// Standard encryption key from environment variable — must be exactly 32 bytes (AES-256).
+const ENCRYPTION_KEY = process.env.MEDICAL_ENCRYPTION_KEY;
+if (!ENCRYPTION_KEY || Buffer.byteLength(ENCRYPTION_KEY, 'utf-8') !== 32) {
+  throw new Error('MEDICAL_ENCRYPTION_KEY is not set to a 32-byte value in the environment. Refusing to start with an insecure default key.');
+}
 const IV_LENGTH = 12; // For AES-GCM
 const ALGORITHM = 'aes-256-gcm';
 
