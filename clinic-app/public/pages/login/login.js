@@ -7,7 +7,7 @@ const API_BASE_URL = '';  // Same server — relative URL
 
 // Current State
 let currentTab = 'clinic'; // Always clinic
-let currentLang = 'en';
+let currentLang = 'ar';
 let tempToken = '';
 let accessToken = '';
 let lastLoginData = null;

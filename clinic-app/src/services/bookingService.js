@@ -26,7 +26,7 @@ const checkFollowUpEligibility = async (tenantId, phone) => {
       const res = await db.query(
         `SELECT a.* FROM appointments a
          JOIN patients p ON a.patient_id = p.id
-         WHERE a.tenant_id = $1 AND p.phone = $2 AND (a.status = 'completed' OR a.status = 'confirmed') AND a.date >= $3
+         WHERE a.tenant_id = ? AND p.phone = ? AND (a.status = 'completed' OR a.status = 'confirmed') AND a.date >= ?
          ORDER BY a.date DESC LIMIT 1`,
         [tenantId, phone, fourteenDaysAgo]
       );
@@ -64,17 +64,17 @@ const checkSlotAvailability = async (tenantId, doctorId, date, time) => {
     try {
       // Check bookings
       const bookRes = await db.query(
-        `SELECT id FROM appointments 
-         WHERE tenant_id = $1 AND doctor_id = $2 AND date = $3 AND time = $4 AND status != 'cancelled'`,
+        `SELECT id FROM appointments
+         WHERE tenant_id = ? AND doctor_id = ? AND date = ? AND time = ? AND status != 'cancelled'`,
         [tenantId, doctorId, date, time]
       );
       if (bookRes.rows.length > 0) return false;
 
       // Check locks
       const lockRes = await db.query(
-        `SELECT id FROM slot_locks 
-         WHERE tenant_id = $1 AND doctor_id = $2 AND date = $3 AND time = $4 AND expires_at > NOW()`,
-        [tenantId, doctorId, date, time]
+        `SELECT id FROM slot_locks
+         WHERE tenant_id = ? AND doctor_id = ? AND date = ? AND time = ? AND expires_at > ?`,
+        [tenantId, doctorId, date, time, new Date().toISOString()]
       );
       if (lockRes.rows.length > 0) return false;
 
@@ -111,7 +111,7 @@ const lockSlot = async (tenantId, doctorId, date, time, patientPhone) => {
     try {
       await db.query(
         `INSERT INTO slot_locks (id, tenant_id, doctor_id, date, time, patient_phone, expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [lockId, tenantId, doctorId, date, time, patientPhone, expiresAt]
       );
       return lockId;

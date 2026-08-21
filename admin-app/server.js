@@ -14,10 +14,16 @@ process.on('unhandledRejection', (reason) => {
 const app = express();
 const PORT = process.env.PORT || 3002;
 
+// Trust the first proxy hop so req.ip reflects the real client IP (needed
+// both for accurate audit-log IPs and for the IP whitelist below) instead of
+// the proxy's own address.
+app.set('trust proxy', 1);
+
 // Middlewares
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(require('./src/middleware/ipWhitelist'));
 
 // Serve static frontend files with caching disabled to guarantee design system updates load instantly
 app.use((req, res, next) => {
