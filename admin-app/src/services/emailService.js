@@ -601,6 +601,34 @@ async function notifyBroadcastMessage({ tenant, owner, subject, message }) {
   return sendEmail({ to: recipient, subject, html });
 }
 
+/**
+ * 8. كود التحقق بخطوتين (2FA) لتسجيل دخول مشغلي المنصة
+ */
+async function notifyAdminOtpCode({ admin, otpCode, expiryMinutes = 5 }) {
+  const recipient = admin?.email;
+  if (!recipient) return;
+
+  const subject = `🔐 كود التحقق بخطوتين — ${otpCode}`;
+
+  const contentHtml = `
+    <p>سعادة <strong>${admin.full_name || 'المشغل'}</strong>،</p>
+    <p>كود الدخول لحسابك في لوحة عمليات المنصة هو:</p>
+    <div style="text-align:center; margin: 20px 0;">
+      <span style="font-family: monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #7c3aed;">${otpCode}</span>
+    </div>
+    <p style="font-size: 13px; color: #64748b;">الكود صالح لمدة ${expiryMinutes} دقائق فقط. إذا لم تطلب تسجيل الدخول، تجاهل هذه الرسالة.</p>
+  `;
+
+  const html = buildHtmlTemplate({
+    badgeText: 'أمان الحساب',
+    title: 'كود التحقق بخطوتين',
+    preheader: `كود الدخول الخاص بك: ${otpCode}`,
+    contentHtml
+  });
+
+  return sendEmail({ to: recipient, subject, html });
+}
+
 module.exports = {
   sendEmail,
   buildHtmlTemplate,
@@ -610,5 +638,6 @@ module.exports = {
   notifyClinicTicketReplied,
   notifyClinicStatusChanged,
   notifyDoctorPasswordReset,
-  notifyBroadcastMessage
+  notifyBroadcastMessage,
+  notifyAdminOtpCode
 };

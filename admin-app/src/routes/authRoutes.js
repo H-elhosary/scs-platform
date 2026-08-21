@@ -1,7 +1,9 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const db = require('../db/connection');
+const emailService = require('../services/emailService');
 
 const router = express.Router();
 require('dotenv').config();
@@ -13,7 +15,13 @@ if (!JWT_ACCESS_SECRET || !JWT_REFRESH_SECRET) {
 }
 const JWT_ACCESS_EXPIRY = process.env.JWT_ACCESS_EXPIRY || '15m';
 const JWT_REFRESH_EXPIRY = process.env.JWT_REFRESH_EXPIRY || '7d';
-const MOCK_OTP = process.env['2FA_MOCK_OTP'] || '123456';
+const OTP_EXPIRY_MINUTES = parseInt(process.env['2FA_EXPIRY_MINUTES']) || 5;
+
+// In-memory 2FA brute-force guard: caps verification attempts per admin
+// before they're forced back to step 1 with a fresh code. Keyed by adminId,
+// cleared on every new login attempt (see /auth/login below).
+const otpAttempts = new Map();
+const MAX_OTP_ATTEMPTS = 5;
 
 // Helper to generate access and refresh tokens
 const generateTokens = (payload) => {
@@ -74,17 +82,20 @@ router.post('/admin/v1/auth/login', async (req, res) => {
       });
     }
 
-    // Generate temporary token for 2FA
+    // Generate a real random 6-digit code per login, store only its hash in
+    // the temp token (never the plaintext) — nothing else to persist.
+    const otpCode = String(crypto.randomInt(100000, 1000000));
+    const otpHash = bcrypt.hashSync(otpCode, 8);
+
     const tempToken = jwt.sign(
-      { adminId: admin.id, email: admin.email, pending2FA: true },
+      { adminId: admin.id, email: admin.email, pending2FA: true, otpHash },
       JWT_ACCESS_SECRET,
-      { expiresIn: '5m' }
+      { expiresIn: `${OTP_EXPIRY_MINUTES}m` }
     );
 
-    // Mock: Print OTP to console
-    console.log(`\n==========================================`);
-    console.log(`📧 [2FA Mock] Verification code for ${admin.email}: ${MOCK_OTP}`);
-    console.log(`==========================================\n`);
+    otpAttempts.delete(admin.id);
+
+    emailService.notifyAdminOtpCode({ admin, otpCode, expiryMinutes: OTP_EXPIRY_MINUTES }).catch(e => console.error('2FA email error:', e));
 
     return res.status(200).json({
       success: true,
@@ -127,13 +138,26 @@ router.post('/admin/v1/auth/verify-2fa', async (req, res) => {
       });
     }
 
-    // Verify OTP
-    if (otp_code !== MOCK_OTP) {
+    // Verify OTP against the hash embedded in the temp token, with a capped
+    // number of attempts per pending login to slow down brute-forcing a
+    // 6-digit code within its 5-minute window.
+    const attempts = otpAttempts.get(decoded.adminId) || 0;
+    if (attempts >= MAX_OTP_ATTEMPTS) {
+      return res.status(429).json({
+        success: false,
+        error: { code: "TOO_MANY_ATTEMPTS", message: "عدد كبير من المحاولات الخاطئة. يرجى إعادة تسجيل الدخول للحصول على كود جديد." }
+      });
+    }
+
+    const otpValid = decoded.otpHash && bcrypt.compareSync(otp_code, decoded.otpHash);
+    if (!otpValid) {
+      otpAttempts.set(decoded.adminId, attempts + 1);
       return res.status(400).json({
         success: false,
         error: { code: "INVALID_OTP", message: "كود التحقق الثنائي غير صحيح أو منتهي الصلاحية" }
       });
     }
+    otpAttempts.delete(decoded.adminId);
 
     // Find admin — check the in-memory seed accounts first, then fall back to
     // the real DB (operators created via admin-users management only live there).

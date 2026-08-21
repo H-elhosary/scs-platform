@@ -8,7 +8,10 @@ const app = express();
 
 // Middlewares
 app.use(cors());
-app.use(express.json());
+// Capture the raw request body alongside the parsed one — needed to verify
+// the WhatsApp webhook's HMAC signature, which is computed over the exact
+// raw bytes Meta sent, not a re-serialized version of the parsed JSON.
+app.use(express.json({ verify: (req, res, buf) => { req.rawBody = buf; } }));
 app.use(express.urlencoded({ extended: true }));
 
 // Welcome Route

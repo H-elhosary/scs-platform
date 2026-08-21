@@ -28,6 +28,35 @@ router.get('/v1/dashboard/stats', async (req, res) => {
 
     const activeConvs = await db.all(`SELECT COUNT(*) as count FROM conversations WHERE tenant_id = ? AND status IN ('active', 'manual_mode')`, [tenantId]);
 
+    // Real last-7-days revenue breakdown (was 6 hardcoded numbers + today's
+    // real value) — one GROUP BY query, then backfill any day with no paid
+    // appointments to 0 rather than omitting it from the chart.
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
+
+    const revenueRows = await db.all(
+      `SELECT date, SUM(amount) as revenue FROM appointments
+       WHERE tenant_id = ? AND payment_status = 'paid' AND date >= ? AND date <= ?
+       GROUP BY date`,
+      [tenantId, sevenDaysAgoStr, today]
+    );
+    const revenueByDate = {};
+    revenueRows.forEach(r => { revenueByDate[r.date] = parseFloat(r.revenue) || 0; });
+
+    const weekdayLabels = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+    const weeklyRevenue = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dStr = d.toISOString().split('T')[0];
+      weeklyRevenue.push({
+        date: dStr,
+        label: weekdayLabels[d.getDay()] + (i === 0 ? ' (اليوم)' : ''),
+        revenue: revenueByDate[dStr] || 0
+      });
+    }
+
     return res.json({
       success: true,
       data: {
@@ -45,6 +74,7 @@ router.get('/v1/dashboard/stats', async (req, res) => {
         total_revenue: totalRevenue,
         online_revenue: onlineRevenue,
         cash_revenue: cashRevenue,
+        weekly_revenue: weeklyRevenue,
         new_patients_today: 1,
         total_patients: totalPatients?.count || 0,
         pending_approvals: todayAppts.filter(a => a.payment_status === 'pending_approval').length,

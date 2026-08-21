@@ -59,6 +59,11 @@ function setupSQLite() {
       console.error('❌ Failed to open SQLite database:', err);
     } else {
       console.log('✅ Connected to Real Local SQLite Database (Disk Storage).');
+      // Without a busy timeout, a second connection hitting a locked DB
+      // (e.g. a concurrent booking transaction, see appointmentRoutes.js)
+      // fails immediately with SQLITE_BUSY instead of waiting briefly for
+      // the lock to clear.
+      sqliteDb.configure('busyTimeout', 5000);
       bootstrapSQLiteSchema();
     }
   });
@@ -247,6 +252,31 @@ function bootstrapSQLiteSchema() {
       details TEXT,
       ip_address TEXT,
       user_agent TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    // 13. Slot Locks — short-lived holds used by the WhatsApp/Telegram bot's
+    // multi-turn booking flow (bookingService.js) to reserve a slot while a
+    // patient is still mid-conversation, before the appointment row exists.
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS slot_locks (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      doctor_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      time TEXT NOT NULL,
+      patient_phone TEXT,
+      expires_at TEXT NOT NULL
+    )`);
+
+    // 14. Invoices — created by the bot's online/cash-at-reception booking
+    // paths (botController.js) and settled by the Paymob webhook.
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS invoices (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      appointment_id TEXT,
+      patient_id TEXT,
+      amount REAL DEFAULT 0,
+      status TEXT DEFAULT 'pending',
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`);
 

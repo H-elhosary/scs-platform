@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const db = require('../db/connection');
 require('dotenv').config();
 
 const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET;
@@ -73,6 +74,40 @@ const requireClinicStaff = (req, res, next) => {
 };
 
 /**
+ * Middleware to enforce subscription-expiry: a suspended tenant is blocked
+ * entirely; an expired-but-not-suspended tenant keeps read access (GET) but
+ * loses write access until renewed, so staff can still see their data
+ * (patients, records, appointment history) without being able to add to it.
+ * Must run after authenticateToken (needs req.user.tenantId).
+ */
+const checkSubscriptionActive = async (req, res, next) => {
+  try {
+    const tenant = await db.get('SELECT status, expires_at FROM tenants WHERE id = ?', [req.user.tenantId]);
+    if (!tenant) return next(); // tenant lookup failure shouldn't hard-lock staff out
+
+    if (tenant.status === 'suspended') {
+      return res.status(403).json({
+        success: false,
+        error: { code: "SUBSCRIPTION_SUSPENDED", message: "تم تعليق اشتراك العيادة. يرجى التواصل مع إدارة المنصة." }
+      });
+    }
+
+    const isExpired = tenant.expires_at && new Date(tenant.expires_at) < new Date();
+    if (isExpired && req.method !== 'GET') {
+      return res.status(403).json({
+        success: false,
+        error: { code: "SUBSCRIPTION_EXPIRED", message: "انتهى اشتراك العيادة. الوضع الحالي للقراءة فقط — يرجى تجديد الاشتراك لاستئناف الاستخدام الكامل." }
+      });
+    }
+
+    next();
+  } catch (e) {
+    console.error('checkSubscriptionActive error:', e);
+    next(); // fail open on an unexpected DB error rather than lock staff out
+  }
+};
+
+/**
  * Helper to set PostgreSQL Tenant RLS context in a transaction client
  * @param {import('pg').PoolClient} client 
  * @param {string} tenantId 
@@ -85,5 +120,6 @@ module.exports = {
   authenticateToken,
   requireOperator,
   requireClinicStaff,
+  checkSubscriptionActive,
   setTenantContext
 };

@@ -1,19 +1,99 @@
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const db = require('../db/connection');
 const botController = require('../services/botController');
 
-// The debug endpoints below (bot-state / reset-state / seed-visit) let anyone
-// inspect or mutate any patient's conversation/booking state with no auth
-// check — they exist only so the bot.js simulator tool can drive test flows.
-// Hard-disable them outside development so they can never be reached in a
-// real deployment.
+// The debug/test endpoints below (paymob/simulate, bot-state, reset-state,
+// seed-visit) let anyone inspect or mutate any patient's conversation/
+// booking/payment state with no auth check — they exist only so the bot.js
+// simulator tool can drive test flows. Hard-disable them outside development
+// so they can never be reached in a real deployment.
 const devOnly = (req, res, next) => {
   if (process.env.NODE_ENV === 'production') {
     return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "غير متاح" } });
   }
   next();
 };
+
+// --- Webhook signature verification ---
+// Each provider's secret is optional: if unset, the request is allowed
+// through with a loud warning (dev/no-credentials-yet mode) rather than
+// rejected outright, so the bot/payment flows keep working until real
+// provider secrets are configured. Once a secret IS set, a mismatch is
+// rejected and logged distinctly from "not configured".
+
+function verifyWhatsappSignature(req) {
+  const secret = process.env.WHATSAPP_APP_SECRET;
+  if (!secret) {
+    console.warn('⚠️  [WhatsApp Webhook] WHATSAPP_APP_SECRET not configured — accepting request unverified.');
+    return true;
+  }
+  const signatureHeader = req.headers['x-hub-signature-256'];
+  if (!signatureHeader || !req.rawBody) {
+    console.error('❌ [WhatsApp Webhook] Missing signature header or raw body — rejecting.');
+    return false;
+  }
+  const expected = 'sha256=' + crypto.createHmac('sha256', secret).update(req.rawBody).digest('hex');
+  const a = Buffer.from(signatureHeader);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    console.error('❌ [WhatsApp Webhook] Signature mismatch — rejecting.');
+    return false;
+  }
+  return true;
+}
+
+function verifyTelegramSecret(req) {
+  const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  if (!secret) {
+    console.warn('⚠️  [Telegram Webhook] TELEGRAM_WEBHOOK_SECRET not configured — accepting request unverified.');
+    return true;
+  }
+  const header = req.headers['x-telegram-bot-api-secret-token'] || '';
+  const a = Buffer.from(header);
+  const b = Buffer.from(secret);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    console.error('❌ [Telegram Webhook] Secret token mismatch — rejecting.');
+    return false;
+  }
+  return true;
+}
+
+function verifyPaymobHmac(req) {
+  const secret = process.env.PAYMOB_HMAC_SECRET;
+  if (!secret) {
+    console.warn('⚠️  [Paymob Webhook] PAYMOB_HMAC_SECRET not configured — accepting request unverified.');
+    return true;
+  }
+  const receivedHmac = req.query.hmac || req.body.hmac;
+  const obj = req.body.obj;
+  if (!receivedHmac || !obj) {
+    console.error('❌ [Paymob Webhook] Missing hmac or obj in payload — rejecting.');
+    return false;
+  }
+  // Field order per Paymob's "Transaction Processed Callback" HMAC spec.
+  // Written from the standard documented order — cross-check against the
+  // live Paymob merchant dashboard docs once real credentials exist; a
+  // wrong order here would otherwise fail silently forever.
+  const fields = [
+    obj.amount_cents, obj.created_at, obj.currency, obj.error_occured,
+    obj.has_parent_transaction, obj.id, obj.integration_id, obj.is_3d_secure,
+    obj.is_auth, obj.is_capture, obj.is_refunded, obj.is_standalone_payment,
+    obj.is_voided, obj.order?.id, obj.owner, obj.pending,
+    obj.source_data?.pan, obj.source_data?.sub_type, obj.source_data?.type,
+    obj.success
+  ].map(v => (v === undefined || v === null) ? '' : String(v)).join('');
+
+  const expected = crypto.createHmac('sha512', secret).update(fields).digest('hex');
+  const a = Buffer.from(String(receivedHmac));
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    console.error('❌ [Paymob Webhook] HMAC mismatch — rejecting. If this persists after configuring PAYMOB_HMAC_SECRET, the field order likely needs adjusting per Paymob\'s live docs.');
+    return false;
+  }
+  return true;
+}
 
 // Mask a phone number / chat id for logging — keep enough to correlate log
 // lines during debugging without printing the full identifier.
@@ -32,7 +112,8 @@ router.get('/webhooks/whatsapp', (req, res) => {
 
   console.log(`[WhatsApp Webhook Verification] Mode: ${mode}, Token: ${token}`);
 
-  if (mode === 'subscribe' && token === 'my_secret_token') {
+  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || 'my_secret_token';
+  if (mode === 'subscribe' && token === verifyToken) {
     return res.status(200).send(challenge);
   } else {
     return res.sendStatus(403);
@@ -44,6 +125,9 @@ router.get('/webhooks/whatsapp', (req, res) => {
  */
 router.post('/webhooks/whatsapp', async (req, res) => {
   try {
+    if (!verifyWhatsappSignature(req)) {
+      return res.status(403).json({ success: false, error: { code: "INVALID_SIGNATURE", message: "توقيع الطلب غير صالح" } });
+    }
     const body = req.body;
     console.log(`[WhatsApp Webhook Received]`);
 
@@ -91,6 +175,9 @@ router.post('/webhooks/whatsapp', async (req, res) => {
  */
 router.post('/webhooks/telegram', async (req, res) => {
   try {
+    if (!verifyTelegramSecret(req)) {
+      return res.status(403).json({ success: false, error: { code: "INVALID_SIGNATURE", message: "توقيع الطلب غير صالح" } });
+    }
     const body = req.body;
     console.log(`[Telegram Webhook Received]`);
 
@@ -129,6 +216,9 @@ router.post('/webhooks/telegram', async (req, res) => {
  */
 router.post('/webhooks/payments/paymob', async (req, res) => {
   try {
+    if (!verifyPaymobHmac(req)) {
+      return res.status(403).json({ success: false, error: { code: "INVALID_SIGNATURE", message: "توقيع الطلب غير صالح" } });
+    }
     const { obj } = req.body;
     console.log(`[Paymob Webhook Transaction Callback] Received`, JSON.stringify(req.body, null, 2));
 
@@ -175,7 +265,7 @@ router.post('/webhooks/payments/paymob', async (req, res) => {
 /**
  * 5. Simulated Paymob Portal page (Interactive UI)
  */
-router.get('/webhooks/payments/paymob/simulate', (req, res) => {
+router.get('/webhooks/payments/paymob/simulate', devOnly, (req, res) => {
   const { invoice_id, tenant_id, appointment_id } = req.query;
 
   res.send(`

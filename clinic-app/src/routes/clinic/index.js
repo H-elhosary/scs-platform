@@ -5,7 +5,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { authenticateToken, requireClinicStaff } = require('../../middleware/auth');
+const { authenticateToken, requireClinicStaff, checkSubscriptionActive } = require('../../middleware/auth');
 const queueState = require('./queueState');
 
 // Import all clinic route modules
@@ -36,6 +36,10 @@ router.use((req, res, next) => {
   req.headers['x-tenant-id'] = req.user.tenantId;
   next();
 });
+
+// Suspended tenants are blocked entirely; expired-but-not-suspended tenants
+// keep read access but lose write access until renewed.
+router.use(checkSubscriptionActive);
 
 // Mount all routes
 router.use(dashboardRoutes);

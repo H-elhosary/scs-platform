@@ -93,43 +93,57 @@ router.post('/v1/appointments', async (req, res) => {
     const endDate = new Date(2026, 0, 1, h, m + durationMin);
     const endTime = `${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}`;
 
-    // Conflict check
-    const existing = await db.all(
-      `SELECT * FROM appointments WHERE date = ? AND doctor_id = ? AND status != 'cancelled'`,
-      [date, targetDoctorId]
-    );
-
-    const newStart = getMinutes(time);
-    const newEnd = newStart + durationMin;
-
-    const hasConflict = existing.some(a => {
-      const start = getMinutes(a.time);
-      const end = getMinutes(a.end_time || a.time);
-      return newStart < end && start < newEnd;
-    });
-
-    if (hasConflict) {
-      return res.status(400).json({
-        success: false,
-        error: { code: "APPOINTMENT_CONFLICT", message: "هذا الوقت يتعارض مع موعد محجوز بالفعل لهذا الطبيب" }
-      });
-    }
-
-    const maxQueueRow = await db.get(`SELECT MAX(queue_number) as max_q FROM appointments WHERE date = ?`, [date]);
-    const queueNumber = (maxQueueRow?.max_q || 0) + 1;
-
     const id = `apt-${Math.random().toString(36).substring(7)}`;
     const tenantId = req.headers['x-tenant-id'] || req.query.tenant_id || req.body.tenant_id || 'a7b3c2d1-e5f6-7a8b-9c0d-1e2f3a4b5c6d';
     const amount = service ? (payment_method === 'online' ? Math.round(service.price * 0.9) : service.price) : 500;
     const bookingCode = `BK-${Math.floor(Math.random() * 9000 + 1000)}`;
     const paymentStatus = payment_method === 'online' ? 'paid' : (visit_type === 'followup' ? 'free' : 'pending');
+    const newStart = getMinutes(time);
+    const newEnd = newStart + durationMin;
 
-    await db.run(`
-      INSERT INTO appointments (id, tenant_id, patient_id, doctor_id, service_id, date, time, end_time, status, visit_type, payment_method, payment_status, amount, queue_number, notes, booking_code, location)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [id, tenantId, patient_id, targetDoctorId, service_id || 'svc-001', date, time, endTime, visit_type || 'exam', payment_method || 'cash', paymentStatus, amount, queueNumber, notes || '', bookingCode, location || '']);
+    // The conflict check + insert must be atomic — two concurrent requests
+    // for the same doctor/date/time could otherwise both pass the check
+    // before either inserts. BEGIN IMMEDIATE takes SQLite's write lock right
+    // away, so a second request's own BEGIN IMMEDIATE blocks (up to the
+    // configured busy timeout) until this transaction commits or rolls back.
+    let newApt;
+    try {
+      await db.run('BEGIN IMMEDIATE');
 
-    const newApt = await db.get(`SELECT * FROM appointments WHERE id = ?`, [id]);
+      const existing = await db.all(
+        `SELECT * FROM appointments WHERE date = ? AND doctor_id = ? AND status != 'cancelled'`,
+        [date, targetDoctorId]
+      );
+
+      const hasConflict = existing.some(a => {
+        const start = getMinutes(a.time);
+        const end = getMinutes(a.end_time || a.time);
+        return newStart < end && start < newEnd;
+      });
+
+      if (hasConflict) {
+        await db.run('ROLLBACK');
+        return res.status(400).json({
+          success: false,
+          error: { code: "APPOINTMENT_CONFLICT", message: "هذا الوقت يتعارض مع موعد محجوز بالفعل لهذا الطبيب" }
+        });
+      }
+
+      const maxQueueRow = await db.get(`SELECT MAX(queue_number) as max_q FROM appointments WHERE date = ?`, [date]);
+      const queueNumber = (maxQueueRow?.max_q || 0) + 1;
+
+      await db.run(`
+        INSERT INTO appointments (id, tenant_id, patient_id, doctor_id, service_id, date, time, end_time, status, visit_type, payment_method, payment_status, amount, queue_number, notes, booking_code, location)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [id, tenantId, patient_id, targetDoctorId, service_id || 'svc-001', date, time, endTime, visit_type || 'exam', payment_method || 'cash', paymentStatus, amount, queueNumber, notes || '', bookingCode, location || '']);
+
+      newApt = await db.get(`SELECT * FROM appointments WHERE id = ?`, [id]);
+      await db.run('COMMIT');
+    } catch (txErr) {
+      await db.run('ROLLBACK').catch(() => {});
+      throw txErr;
+    }
+
     const patientObj = await db.get(`SELECT * FROM patients WHERE id = ?`, [patient_id]);
     const doctorObj = await db.get(`SELECT * FROM doctors WHERE id = ?`, [targetDoctorId]) || await db.get(`SELECT * FROM users WHERE tenant_id = ? AND role = 'owner'`, [tenantId]);
     const tenantObj = await db.get(`SELECT * FROM tenants WHERE id = ?`, [tenantId]);

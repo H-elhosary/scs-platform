@@ -97,7 +97,7 @@ const handleIncomingMessage = async (tenantId, channel, fromNumber, text, profil
     tenant = db.memoryDB.tenants.find(t => t.id === tenantId);
   } else {
     try {
-      const res = await db.query('SELECT * FROM tenants WHERE id = $1', [tenantId]);
+      const res = await db.query('SELECT * FROM tenants WHERE id = ?', [tenantId]);
       if (res.rows.length > 0) tenant = res.rows[0];
     } catch (e) {
       console.error(e);
@@ -121,6 +121,19 @@ const handleIncomingMessage = async (tenantId, channel, fromNumber, text, profil
     };
   }
 
+  // 2. Subscription/maintenance check — after triage (a medical safety
+  // message must never be withheld over a billing status) but before any
+  // booking flow. Suspended or expired tenants get a maintenance reply
+  // instead of continuing.
+  const tenantExpired = tenant.expires_at && new Date(tenant.expires_at) < new Date();
+  if (tenant.status === 'suspended' || tenantExpired) {
+    conversationStates[fromNumber] = { step: 'IDLE', data: {} };
+    return {
+      reply: "⚠️ عذراً، خدمة الحجز عبر البوت متوقفة مؤقتاً لهذه العيادة بسبب حالة الاشتراك. يرجى التواصل مباشرة مع العيادة، أو المحاولة لاحقاً.",
+      state: 'MAINTENANCE'
+    };
+  }
+
   // Get or Initialize State
   let state = conversationStates[fromNumber];
   if (!state || textClean === 'إعادة' || textClean.toLowerCase() === 'reset' || textClean === 'البداية') {
@@ -140,7 +153,7 @@ const handleIncomingMessage = async (tenantId, channel, fromNumber, text, profil
         patient = db.memoryDB.patients.find(p => p.phone === fromNumber && p.tenant_id === tenantId);
       } else {
         try {
-          const res = await db.query('SELECT * FROM patients WHERE phone = $1 AND tenant_id = $2', [fromNumber, tenantId]);
+          const res = await db.query('SELECT * FROM patients WHERE phone = ? AND tenant_id = ?', [fromNumber, tenantId]);
           if (res.rows.length > 0) patient = res.rows[0];
         } catch (e) {
           console.error(e);
@@ -207,12 +220,12 @@ const handleIncomingMessage = async (tenantId, channel, fromNumber, text, profil
           state.data.patient_id = patientId;
         } else {
           try {
-            const res = await db.query(
-              `INSERT INTO patients (name, age, gender, phone, tenant_id) 
-               VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-              [state.data.patient_name, state.data.patient_age, state.data.patient_gender, fromNumber, tenantId]
+            await db.query(
+              `INSERT INTO patients (id, full_name, age, gender, phone, tenant_id)
+               VALUES (?, ?, ?, ?, ?, ?)`,
+              [patientId, state.data.patient_name, state.data.patient_age, state.data.patient_gender, fromNumber, tenantId]
             );
-            state.data.patient_id = res.rows[0].id;
+            state.data.patient_id = patientId;
           } catch (e) {
             console.error(e);
           }
@@ -356,8 +369,8 @@ const handleIncomingMessage = async (tenantId, channel, fromNumber, text, profil
             } else {
               try {
                 await db.query(
-                  `INSERT INTO appointments (id, tenant_id, doctor_id, patient_id, date, time, status, visit_type, price) 
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+                  `INSERT INTO appointments (id, tenant_id, doctor_id, patient_id, date, time, status, visit_type, amount)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                   [apptId, tenantId, state.data.doctor_id, state.data.patient_id, state.data.date, state.data.time, 'confirmed', 'followup', 0]
                 );
               } catch (e) {
@@ -422,13 +435,13 @@ const handleIncomingMessage = async (tenantId, channel, fromNumber, text, profil
         } else {
           try {
             await db.query(
-              `INSERT INTO appointments (id, tenant_id, doctor_id, patient_id, date, time, status, visit_type, price, location) 
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+              `INSERT INTO appointments (id, tenant_id, doctor_id, patient_id, date, time, status, visit_type, amount, location)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
               [apptId, tenantId, state.data.doctor_id, state.data.patient_id, state.data.date, state.data.time, 'pending_payment', 'exam', finalPrice, appointment.location]
             );
             await db.query(
-              `INSERT INTO invoices (id, tenant_id, appointment_id, patient_id, amount, status) 
-               VALUES ($1, $2, $3, $4, $5, $6)`,
+              `INSERT INTO invoices (id, tenant_id, appointment_id, patient_id, amount, status)
+               VALUES (?, ?, ?, ?, ?, ?)`,
               [invoiceId, tenantId, apptId, state.data.patient_id, finalPrice, 'pending']
             );
           } catch (e) {
@@ -476,13 +489,13 @@ const handleIncomingMessage = async (tenantId, channel, fromNumber, text, profil
         } else {
           try {
             await db.query(
-              `INSERT INTO appointments (id, tenant_id, doctor_id, patient_id, date, time, status, visit_type, price, location) 
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+              `INSERT INTO appointments (id, tenant_id, doctor_id, patient_id, date, time, status, visit_type, amount, location)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
               [apptId, tenantId, state.data.doctor_id, state.data.patient_id, state.data.date, state.data.time, 'confirmed', 'exam', 200, appointment.location]
             );
             await db.query(
-              `INSERT INTO invoices (id, tenant_id, appointment_id, patient_id, amount, status) 
-               VALUES ($1, $2, $3, $4, $5, $6)`,
+              `INSERT INTO invoices (id, tenant_id, appointment_id, patient_id, amount, status)
+               VALUES (?, ?, ?, ?, ?, ?)`,
               [invoiceId, tenantId, apptId, state.data.patient_id, 200, 'unpaid']
             );
           } catch (e) {

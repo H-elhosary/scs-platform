@@ -342,9 +342,10 @@ function renderDashboardCharts(stats) {
   const width = rect.width;
   const height = rect.height;
 
-  // Daily revenue for the last 7 days (last day matches today's total revenue)
-  const data = [3200, 4500, 2100, 6000, 4200, 7200, stats.total_revenue || 5000];
-  const labels = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت (اليوم)'];
+  // Real daily revenue for the last 7 days, from the API (was 6 hardcoded numbers).
+  const weekly = stats.weekly_revenue || [];
+  const data = weekly.length ? weekly.map(w => w.revenue) : [0, 0, 0, 0, 0, 0, stats.total_revenue || 0];
+  const labels = weekly.length ? weekly.map(w => w.label) : ['', '', '', '', '', '', 'اليوم'];
 
   const maxVal = Math.max(...data, 1000) * 1.2;
   const minVal = 0;
