@@ -27,7 +27,7 @@
       <section class="table-card">
         <div class="table-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; padding:18px 20px; border-bottom:1px solid var(--scs-border);">
           <h3 style="margin:0; font-size:15px; font-weight:700; color:var(--scs-text-heading);">سجل التذاكر والطلبات العامة</h3>
-          <div style="display:flex; gap:10px;">
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
             <select id="filter-ticket-status" class="form-input" style="width:auto; cursor:pointer;" onchange="filterTickets()">
               <option value="all">كل الحالات</option>
               <option value="pending">قيد الانتظار</option>
@@ -42,12 +42,24 @@
               <option value="maintenance">صيانة ودعم فني</option>
               <option value="complaint">شكوى أو اقتراح</option>
             </select>
+            <select id="filter-ticket-priority" class="form-input" style="width:auto; cursor:pointer;" onchange="filterTickets()">
+              <option value="all">كل الأولويات</option>
+              <option value="urgent">عاجل</option>
+              <option value="high">مرتفعة</option>
+              <option value="normal">عادية</option>
+              <option value="low">منخفضة</option>
+            </select>
+            <select id="filter-ticket-assignee" class="form-input" style="width:auto; cursor:pointer;" onchange="filterTickets()">
+              <option value="all">كل المسؤولين</option>
+              <option value="unassigned">غير مُسند</option>
+            </select>
+            <button type="button" id="export-tickets-csv-btn" class="btn-outline-cta" style="font-size:12.5px;"><i class="fa-solid fa-file-csv"></i> تصدير CSV</button>
           </div>
         </div>
         <div class="table-responsive">
           <table class="clinic-table">
-            <thead><tr><th>رقم الطلب</th><th>العيادة</th><th>نوع الطلب</th><th>عنوان الطلب</th><th>تاريخ التقديم</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
-            <tbody id="admin-tickets-table-body"><tr><td colspan="7" class="text-center" style="padding:24px; color:var(--scs-text-muted);">جاري تحميل الطلبات...</td></tr></tbody>
+            <thead><tr><th>رقم الطلب</th><th>العيادة</th><th>نوع الطلب</th><th>عنوان الطلب</th><th>الأولوية</th><th>المسؤول</th><th>تاريخ التقديم</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
+            <tbody id="admin-tickets-table-body"><tr><td colspan="9" class="text-center" style="padding:24px; color:var(--scs-text-muted);">جاري تحميل الطلبات...</td></tr></tbody>
           </table>
         </div>
       </section>
@@ -85,6 +97,23 @@
               <option value="resolved">مكتمل ومحلول</option>
               <option value="rejected">مرفوض</option>
             </select>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px;">
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="update-tkt-priority">الأولوية</label>
+              <select id="update-tkt-priority">
+                <option value="urgent">عاجل (4 ساعات)</option>
+                <option value="high">مرتفعة (24 ساعة)</option>
+                <option value="normal" selected>عادية (72 ساعة)</option>
+                <option value="low">منخفضة (7 أيام)</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="update-tkt-assignee">المسؤول عن الطلب</label>
+              <select id="update-tkt-assignee">
+                <option value="">بدون إسناد</option>
+              </select>
+            </div>
           </div>
           <div class="form-group">
             <label for="update-tkt-notes">الرد والملحوظات للعيادة *</label>

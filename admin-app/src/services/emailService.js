@@ -576,6 +576,31 @@ async function notifyDoctorPasswordReset({ owner, tenant, resetLink, temporaryPa
   return sendEmail({ to: recipient, subject, html });
 }
 
+/**
+ * 7. رسالة بث جماعية من إدارة المنصة إلى مالك عيادة (جزء من عملية بث لعدة عيادات)
+ */
+async function notifyBroadcastMessage({ tenant, owner, subject, message }) {
+  const recipient = owner?.email;
+  if (!recipient) return;
+
+  const contentHtml = `
+    <p>سعادة <strong>${owner.full_name || 'الطبيب المالك'}</strong>${tenant?.name ? ` — عيادة ${tenant.name}` : ''}،</p>
+    <div style="white-space: pre-wrap; font-size: 14px; line-height: 1.8;">${message}</div>
+  `;
+
+  const html = buildHtmlTemplate({
+    badgeText: 'إشعار عام من إدارة المنصة',
+    title: subject,
+    contentHtml,
+    actionButton: {
+      text: 'فتح لوحة التحكم',
+      url: `http://localhost:3001`
+    }
+  });
+
+  return sendEmail({ to: recipient, subject, html });
+}
+
 module.exports = {
   sendEmail,
   buildHtmlTemplate,
@@ -584,5 +609,6 @@ module.exports = {
   notifyClinicSubscriptionUpdated,
   notifyClinicTicketReplied,
   notifyClinicStatusChanged,
-  notifyDoctorPasswordReset
+  notifyDoctorPasswordReset,
+  notifyBroadcastMessage
 };

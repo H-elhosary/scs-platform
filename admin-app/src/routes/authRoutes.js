@@ -135,8 +135,15 @@ router.post('/admin/v1/auth/verify-2fa', async (req, res) => {
       });
     }
 
-    // Find admin
+    // Find admin — check the in-memory seed accounts first, then fall back to
+    // the real DB (operators created via admin-users management only live there).
     let admin = db.memoryDB.admin_users.find(u => u.id === decoded.adminId);
+
+    if (!admin) {
+      try {
+        admin = await db.get('SELECT * FROM admin_users WHERE id = ?', [decoded.adminId]);
+      } catch (e) {}
+    }
 
     if (!admin) {
       return res.status(404).json({
@@ -145,9 +152,16 @@ router.post('/admin/v1/auth/verify-2fa', async (req, res) => {
       });
     }
 
+    if (admin.status === 'inactive') {
+      return res.status(403).json({
+        success: false,
+        error: { code: "ACCOUNT_INACTIVE", message: "هذا الحساب موقوف. يرجى التواصل مع مشغل Super Admin." }
+      });
+    }
+
     // Generate full tokens
     const tokenPayload = {
-      adminId: admin.id,
+      id: admin.id,
       email: admin.email,
       role: admin.role,
       type: 'admin'

@@ -1,20 +1,32 @@
 const express = require('express');
 const db = require('../db/connection');
-const { authenticateToken, requireOperator } = require('../middleware/auth');
+const { authenticateToken, requireOperator, requireAdminRole } = require('../middleware/auth');
 const bcrypt = require('bcryptjs');
 const emailService = require('../services/emailService');
+const notificationService = require('../services/notificationService');
 
 const router = express.Router();
 
 // Apply auth middleware to all admin routes
 router.use('/admin/v1', authenticateToken, requireOperator);
 
-// Helper: Calculate estimated MRR based on subscription plan
-const getPlanMRR = (plan) => {
+// Helper: fetch a plan row from the real `plans` table, case-insensitively.
+const getPlanRow = async (plan) => {
+  if (!plan) return null;
+  try {
+    return await db.get('SELECT * FROM plans WHERE LOWER(id) = ?', [plan.toLowerCase()]);
+  } catch (e) {
+    return null;
+  }
+};
+
+// Helper: Calculate estimated MRR based on subscription plan (DB-backed, with the
+// original hardcoded values kept as a fallback for plan ids outside the seeded catalog)
+const getPlanMRR = async (plan) => {
   const p = plan.toLowerCase();
-  const found = db.memoryDB && db.memoryDB.plans ? db.memoryDB.plans.find(pl => pl.id === p) : null;
-  if (found) return found.price_usd;
-  
+  const row = await getPlanRow(p);
+  if (row) return row.price_usd;
+
   switch (p) {
     case 'basic': return 50;     // $50 / month
     case 'pro': return 100;      // $100 / month
@@ -23,20 +35,20 @@ const getPlanMRR = (plan) => {
   }
 };
 
-// Helper: Get feature flags based on subscription plan
-const getPlanFeatureFlags = (plan) => {
+// Helper: Get feature flags based on subscription plan (DB-backed, same fallback pattern)
+const getPlanFeatureFlags = async (plan) => {
   const p = plan.toLowerCase();
-  const found = db.memoryDB && db.memoryDB.plans ? db.memoryDB.plans.find(pl => pl.id === p) : null;
-  if (found) {
+  const row = await getPlanRow(p);
+  if (row) {
     return {
-      allow_multi_doctor: !!found.allow_multi_doctor,
-      allow_insurance: !!found.allow_insurance,
-      allow_refunds: !!found.allow_refunds,
-      allow_whatsapp: !!found.allow_whatsapp,
-      allow_telegram: !!found.allow_telegram,
-      allow_analytics: !!found.allow_analytics,
-      allow_voice_bot: !!found.allow_voice_bot,
-      allow_custom_branding: !!found.allow_custom_branding
+      allow_multi_doctor: !!row.allow_multi_doctor,
+      allow_insurance: !!row.allow_insurance,
+      allow_refunds: !!row.allow_refunds,
+      allow_whatsapp: !!row.allow_whatsapp,
+      allow_telegram: !!row.allow_telegram,
+      allow_analytics: !!row.allow_analytics,
+      allow_voice_bot: !!row.allow_voice_bot,
+      allow_custom_branding: !!row.allow_custom_branding
     };
   }
   return {
@@ -83,6 +95,24 @@ const logAdminAction = async (adminId, action, targetType, targetId, details, re
   }
 };
 
+// Helper: real per-tenant usage numbers (patients/appointments/doctors counted
+// from the actual tables, WhatsApp connectivity from real conversation rows).
+// Replaces the previous hardcoded-by-slug demo numbers.
+async function computeTenantUsageStats(tenantId) {
+  const [patRow, apptRow, docRow, waRow] = await Promise.all([
+    db.get('SELECT COUNT(*) as count FROM patients WHERE tenant_id = ?', [tenantId]),
+    db.get('SELECT COUNT(*) as count FROM appointments WHERE tenant_id = ?', [tenantId]),
+    db.get(`SELECT COUNT(*) as count FROM users WHERE tenant_id = ? AND (role = 'doctor' OR role = 'owner')`, [tenantId]),
+    db.get(`SELECT COUNT(*) as count FROM conversations WHERE tenant_id = ? AND channel = 'whatsapp'`, [tenantId])
+  ]);
+  return {
+    total_patients: patRow?.count || 0,
+    total_appointments: apptRow?.count || 0,
+    doctor_count: docRow?.count || 0,
+    whatsapp_connection: (waRow?.count || 0) > 0 ? 'connected' : 'disconnected'
+  };
+}
+
 /**
  * GET /admin/v1/tenants
  * Fetch all tenants and overall platform analytics
@@ -104,53 +134,20 @@ router.get('/admin/v1/tenants', async (req, res) => {
       tenantsList = [];
     }
 
-    // Populate usage_stats and doctor objects for each tenant
+    // Populate real usage_stats and doctor objects for each tenant
     const resolvedTenants = [];
     for (const t of tenantsList) {
-      let totalPatients = 0;
-      let totalAppointments = 0;
-      let storageUsed = 0;
-      let whatsappConnection = 'connected';
-      
-      if (db.isMock) {
-        totalPatients = db.memoryDB.patients.filter(p => p.tenant_id === t.id).length;
-        totalAppointments = db.memoryDB.appointments.filter(a => a.tenant_id === t.id).length;
-        
-        // Seed default stats
-        if (totalPatients === 0) totalPatients = t.slug === 'dr-mohamed-noor' ? 142 : 12;
-        if (totalAppointments === 0) totalAppointments = t.slug === 'dr-mohamed-noor' ? 450 : 25;
-        storageUsed = t.slug === 'dr-mohamed-noor' ? 120.4 : 14.2;
-        whatsappConnection = t.slug === 'dr-mohamed-noor' ? 'connected' : 'disconnected';
-      } else {
-        try {
-          const patCount = await db.query('SELECT COUNT(*) FROM patients WHERE tenant_id = $1', [t.id]);
-          totalPatients = parseInt(patCount.rows[0].count) || 0;
-          
-          const apptCount = await db.query('SELECT COUNT(*) FROM appointments WHERE tenant_id = $1', [t.id]);
-          totalAppointments = parseInt(apptCount.rows[0].count) || 0;
-        } catch (e) {
-          console.error(e);
-        }
-        
-        if (totalPatients === 0) totalPatients = t.slug === 'dr-mohamed-noor' ? 142 : 12;
-        if (totalAppointments === 0) totalAppointments = t.slug === 'dr-mohamed-noor' ? 450 : 25;
-        storageUsed = t.slug === 'dr-mohamed-noor' ? 120.4 : 14.2;
-        whatsappConnection = 'connected';
-      }
+      const usage = await computeTenantUsageStats(t.id).catch(() => ({
+        total_patients: 0, total_appointments: 0, doctor_count: 0, whatsapp_connection: 'disconnected'
+      }));
 
       resolvedTenants.push({
         ...t,
-        usage_stats: {
-          total_patients: totalPatients,
-          total_appointments: totalAppointments,
-          whatsapp_connection: whatsappConnection,
-          storage_used_mb: storageUsed
-        },
+        usage_stats: usage,
         doctor: {
           name: t.owner_name,
           email: t.owner_email,
-          phone: t.owner_phone,
-          last_login_at: new Date(Date.now() - 3 * 3600 * 1000).toISOString()
+          phone: t.owner_phone
         }
       });
     }
@@ -168,25 +165,26 @@ router.get('/admin/v1/tenants', async (req, res) => {
       return t.status === 'active' && expiry > now && expiry <= thirtyDaysFromNow;
     }).length;
 
-    // Calculate Estimated MRR and plans breakdown
+    // Calculate Estimated MRR and plans breakdown from real plan prices
+    const planPriceRows = await db.all('SELECT id, price_usd FROM plans').catch(() => []);
+    const planPriceMap = {};
+    (planPriceRows || []).forEach(p => { planPriceMap[p.id.toLowerCase()] = p.price_usd; });
+    const fallbackPrice = { basic: 50, pro: 100, enterprise: 250 };
+
     let estimatedMRR = 0;
     let basicCount = 0;
     let proCount = 0;
     let enterpriseCount = 0;
-    
+
     tenantsList.forEach(t => {
       if (t.status === 'active') {
         const plan = t.subscription_plan.toLowerCase();
-        if (plan === 'basic') {
-          basicCount++;
-          estimatedMRR += 50;
-        } else if (plan === 'pro') {
-          proCount++;
-          estimatedMRR += 100;
-        } else if (plan === 'enterprise') {
-          enterpriseCount++;
-          estimatedMRR += 250;
-        }
+        if (plan === 'basic') basicCount++;
+        else if (plan === 'pro') proCount++;
+        else if (plan === 'enterprise') enterpriseCount++;
+
+        const price = planPriceMap[plan] != null ? planPriceMap[plan] : (fallbackPrice[plan] || 0);
+        estimatedMRR += price;
       }
     });
 
@@ -222,9 +220,9 @@ router.get('/admin/v1/tenants', async (req, res) => {
  * POST /admin/v1/tenants
  * Onboard new tenant (Clinic) and owner user
  */
-router.post('/admin/v1/tenants', async (req, res) => {
-  const { 
-    name, 
+router.post('/admin/v1/tenants', requireAdminRole('admin', 'super_admin'), async (req, res) => {
+  const {
+    name,
     slug, 
     specialty, 
     email, 
@@ -253,7 +251,7 @@ router.post('/admin/v1/tenants', async (req, res) => {
     const randomPassword = 'Cl-' + Math.random().toString(36).substring(2, 6) + '#' + Math.floor(1000 + Math.random() * 9000);
     const passwordHash = bcrypt.hashSync(randomPassword, 10);
 
-    const features = getPlanFeatureFlags(subscription_plan);
+    const features = await getPlanFeatureFlags(subscription_plan);
 
     // 2. Check for duplicate slug in SQLite / DB
     const existingTenant = await db.get(`SELECT id FROM tenants WHERE LOWER(slug) = ?`, [slug.toLowerCase()]);
@@ -385,7 +383,7 @@ router.post('/admin/v1/tenants', async (req, res) => {
  * PUT /admin/v1/tenants/:id/subscription
  * Modify subscription plan or extend expiry date
  */
-router.put('/admin/v1/tenants/:id/subscription', async (req, res) => {
+router.put('/admin/v1/tenants/:id/subscription', requireAdminRole('admin', 'super_admin'), async (req, res) => {
   const { id } = req.params;
   const { subscription_plan, months_to_extend } = req.body;
 
@@ -411,7 +409,7 @@ router.put('/admin/v1/tenants/:id/subscription', async (req, res) => {
 
         if (subscription_plan) {
           tenant.subscription_plan = subscription_plan;
-          const features = getPlanFeatureFlags(subscription_plan);
+          const features = await getPlanFeatureFlags(subscription_plan);
           tenant.allow_multi_doctor = features.allow_multi_doctor;
           tenant.allow_insurance = features.allow_insurance;
           tenant.allow_refunds = features.allow_refunds;
@@ -438,12 +436,12 @@ router.put('/admin/v1/tenants/:id/subscription', async (req, res) => {
           newExpiry.setMonth(newExpiry.getMonth() + parseInt(months_to_extend));
         }
 
-        const features = getPlanFeatureFlags(newPlan);
+        const features = await getPlanFeatureFlags(newPlan);
         const updateRes = await db.query(
-          `UPDATE tenants 
-           SET subscription_plan = $1, expires_at = $2, allow_multi_doctor = $3, allow_insurance = $4, allow_refunds = $5, updated_at = NOW() 
+          `UPDATE tenants
+           SET subscription_plan = $1, expires_at = $2, allow_multi_doctor = $3, allow_insurance = $4, allow_refunds = $5, updated_at = CURRENT_TIMESTAMP
            WHERE id = $6 RETURNING *`,
-          [newPlan, newExpiry, features.allow_multi_doctor, features.allow_insurance, features.allow_refunds, id]
+          [newPlan, newExpiry.toISOString(), features.allow_multi_doctor, features.allow_insurance, features.allow_refunds, id]
         );
         tenant = updateRes.rows[0];
         updatedExpiresAt = tenant.expires_at;
@@ -537,7 +535,7 @@ router.put('/admin/v1/tenants/:id/subscription', async (req, res) => {
  * PUT /admin/v1/tenants/:id/status
  * Suspend or reactivate clinic access
  */
-router.put('/admin/v1/tenants/:id/status', async (req, res) => {
+router.put('/admin/v1/tenants/:id/status', requireAdminRole('admin', 'super_admin'), async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
@@ -558,7 +556,7 @@ router.put('/admin/v1/tenants/:id/status', async (req, res) => {
       }
     } else {
       const result = await db.query(
-        'UPDATE tenants SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
+        'UPDATE tenants SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
         [status, id]
       );
       if (result.rows.length > 0) {
@@ -639,10 +637,14 @@ router.get('/admin/v1/tenants/:id', async (req, res) => {
       });
     }
 
+    const usage_stats = await computeTenantUsageStats(id).catch(() => ({
+      total_patients: 0, total_appointments: 0, doctor_count: 0, whatsapp_connection: 'disconnected'
+    }));
+
     return res.status(200).json({
       success: true,
       data: {
-        tenant: tenant,
+        tenant: { ...tenant, usage_stats },
         owner: owner ? {
           email: owner.email,
           phone: owner.phone,
@@ -664,7 +666,7 @@ router.get('/admin/v1/tenants/:id', async (req, res) => {
  * PUT /admin/v1/tenants/:id
  * Update tenant details (Name, Specialty, Plan, Owner Phone/Email)
  */
-router.put('/admin/v1/tenants/:id', async (req, res) => {
+router.put('/admin/v1/tenants/:id', requireAdminRole('admin', 'super_admin'), async (req, res) => {
   const { id } = req.params;
   const { name, specialty, subscription_plan, email, phone } = req.body;
 
@@ -698,34 +700,29 @@ router.put('/admin/v1/tenants/:id', async (req, res) => {
         await db.query('BEGIN');
         try {
           const tenantRes = await db.query(
-            `UPDATE tenants SET name = $1, specialty = $2, subscription_plan = $3, updated_at = NOW()
+            `UPDATE tenants SET name = $1, specialty = $2, subscription_plan = $3, updated_at = CURRENT_TIMESTAMP
              WHERE id = $4 RETURNING *`,
             [newName, newSpecialty, newPlan, id]
           );
           tenant = tenantRes.rows[0];
           
           if (email || phone) {
-            // Find owner role
-            const roleRes = await db.query(`SELECT id FROM roles WHERE tenant_id = $1 AND name = 'owner' LIMIT 1`, [id]);
-            if (roleRes.rows.length > 0) {
-              const roleId = roleRes.rows[0].id;
-              
-              const ownerRes = await db.query(
-                `SELECT * FROM users WHERE tenant_id = $1 AND role_id = $2 LIMIT 1`,
-                [id, roleId]
+            // `users` has a flat `role` text column — no `roles`/`role_id` table exists.
+            const ownerRes = await db.query(
+              `SELECT * FROM users WHERE tenant_id = $1 AND role = 'owner' LIMIT 1`,
+              [id]
+            );
+            if (ownerRes.rows.length > 0) {
+              const dbOwner = ownerRes.rows[0];
+              let newEmail = email ? email.toLowerCase() : dbOwner.email;
+              let newPhone = phone || dbOwner.phone;
+
+              const userRes = await db.query(
+                `UPDATE users SET email = $1, phone = $2, updated_at = CURRENT_TIMESTAMP
+                 WHERE id = $3 RETURNING *`,
+                [newEmail, newPhone, dbOwner.id]
               );
-              if (ownerRes.rows.length > 0) {
-                const dbOwner = ownerRes.rows[0];
-                let newEmail = email ? email.toLowerCase() : dbOwner.email;
-                let newPhone = phone || dbOwner.phone;
-                
-                const userRes = await db.query(
-                  `UPDATE users SET email = $1, phone = $2, updated_at = NOW() 
-                   WHERE id = $3 RETURNING *`,
-                  [newEmail, newPhone, dbOwner.id]
-                );
-                owner = userRes.rows[0];
-              }
+              owner = userRes.rows[0];
             }
           }
           await db.query('COMMIT');
@@ -774,7 +771,7 @@ router.put('/admin/v1/tenants/:id', async (req, res) => {
  * DELETE /admin/v1/tenants/:id
  * Delete tenant and associated users/roles (only if suspended/inactive)
  */
-router.delete('/admin/v1/tenants/:id', async (req, res) => {
+router.delete('/admin/v1/tenants/:id', requireAdminRole('super_admin'), async (req, res) => {
   const { id } = req.params;
 
   try {
@@ -863,7 +860,7 @@ router.delete('/admin/v1/tenants/:id', async (req, res) => {
  * POST /admin/v1/tenants/:id/reset-password
  * Reset doctor password and email the newly generated password to the doctor
  */
-router.post('/admin/v1/tenants/:id/reset-password', async (req, res) => {
+router.post('/admin/v1/tenants/:id/reset-password', requireAdminRole('admin', 'super_admin'), async (req, res) => {
   const { id } = req.params;
 
   try {
@@ -931,7 +928,7 @@ router.post('/admin/v1/tenants/:id/reset-password', async (req, res) => {
  * PUT /admin/v1/tenants/:id/features
  * Override Feature Flags manually
  */
-router.put('/admin/v1/tenants/:id/features', async (req, res) => {
+router.put('/admin/v1/tenants/:id/features', requireAdminRole('admin', 'super_admin'), async (req, res) => {
   const { id } = req.params;
   const { 
     allow_multi_doctor, 
@@ -973,7 +970,7 @@ router.put('/admin/v1/tenants/:id/features', async (req, res) => {
                  allow_whatsapp = COALESCE($4, allow_whatsapp), 
                  allow_analytics = COALESCE($5, allow_analytics), 
                  allow_voice_bot = COALESCE($6, allow_voice_bot), 
-                 updated_at = NOW() 
+                 updated_at = CURRENT_TIMESTAMP 
              WHERE id = $7 RETURNING *`,
             [
               newMulti, 
@@ -989,7 +986,7 @@ router.put('/admin/v1/tenants/:id/features', async (req, res) => {
           // Fallback if custom columns are not yet in postgres
           updateRes = await db.query(
             `UPDATE tenants 
-             SET allow_multi_doctor = $1, allow_insurance = $2, allow_refunds = $3, updated_at = NOW() 
+             SET allow_multi_doctor = $1, allow_insurance = $2, allow_refunds = $3, updated_at = CURRENT_TIMESTAMP 
              WHERE id = $4 RETURNING *`,
             [newMulti, newInsurance, newRefunds, id]
           );
@@ -1029,95 +1026,22 @@ router.put('/admin/v1/tenants/:id/features', async (req, res) => {
 });
 
 /**
- * POST /admin/v1/tenants/:id/reset-password
- * Reset doctor password simulator
- */
-router.post('/admin/v1/tenants/:id/reset-password', async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    let tenant = null;
-    let owner = null;
-
-    if (db.isMock) {
-      tenant = db.memoryDB.tenants.find(t => t.id === id);
-      if (tenant) {
-        owner = db.memoryDB.users.find(u => u.tenant_id === id);
-      }
-    } else {
-      const tenantRes = await db.query('SELECT * FROM tenants WHERE id = $1', [id]);
-      if (tenantRes.rows.length > 0) {
-        tenant = tenantRes.rows[0];
-        const ownerRes = await db.query(
-          `SELECT u.* FROM users u 
-           JOIN roles r ON u.role_id = r.id 
-           WHERE u.tenant_id = $1 AND r.name = 'owner' LIMIT 1`,
-          [id]
-        );
-        owner = ownerRes.rows[0] || null;
-      }
-    }
-
-    if (!tenant || !owner) {
-      return res.status(404).json({
-        success: false,
-        error: { code: "NOT_FOUND", message: "العيادة أو الطبيب المالك غير موجود" }
-      });
-    }
-
-    // Generate simulated password reset token and link
-    const resetToken = `rst_${Math.random().toString(36).substring(2)}${Math.random().toString(36).substring(2)}`;
-    const resetLink = `https://www.SCS-admin.com/reset-password?token=${resetToken}`;
-
-    // Write audit log
-    await logAdminAction(
-      req.user.id,
-      'user.password_reset',
-      'user',
-      owner.id,
-      { clinicName: tenant.name, ownerEmail: owner.email },
-      req
-    );
-
-    // Send Password Reset Email
-    emailService.notifyDoctorPasswordReset({
-      owner,
-      tenant,
-      resetLink
-    }).catch(e => console.error('Reset password email error:', e));
-
-    return res.status(200).json({
-      success: true,
-      message: "تم توليد رابط إعادة تعيين كلمة المرور بنجاح وإرساله بريدياً للطبيب",
-      data: {
-        reset_link: resetLink
-      }
-    });
-
-  } catch (error) {
-    console.error('Error resetting doctor password:', error);
-    return res.status(500).json({
-      success: false,
-      error: { code: "SERVER_ERROR", message: "حدث خطأ أثناء محاولة إعادة تعيين كلمة المرور" }
-    });
-  }
-});
-
-/**
  * GET /admin/v1/audit-logs
  * Fetch recent operator audit logs
  */
-router.get('/admin/v1/audit-logs', async (req, res) => {
+router.get('/admin/v1/audit-logs', requireAdminRole('admin', 'super_admin'), async (req, res) => {
   try {
+    const limit = Math.min(parseInt(req.query.limit) || 100, 5000);
     let logs = [];
     if (db.isMock) {
       logs = db.memoryDB.admin_audit_logs || [];
     } else {
       const result = await db.query(
-        `SELECT l.*, a.full_name as operator_name 
+        `SELECT l.*, a.full_name as operator_name
          FROM admin_audit_logs l
          LEFT JOIN admin_users a ON a.id = l.admin_id
-         ORDER BY l.created_at DESC LIMIT 100`
+         ORDER BY l.created_at DESC LIMIT $1`,
+        [limit]
       );
       logs = result.rows;
     }
@@ -1160,7 +1084,12 @@ router.get('/admin/v1/tickets', async (req, res) => {
     if (db.isMock) {
       tickets = [...db.memoryDB.tickets].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     } else {
-      const result = await db.query(`SELECT * FROM tickets ORDER BY created_at DESC`);
+      const result = await db.query(
+        `SELECT t.*, a.full_name as assignee_name
+         FROM tickets t
+         LEFT JOIN admin_users a ON a.id = t.assigned_to
+         ORDER BY t.created_at DESC`
+      );
       tickets = result.rows;
     }
     return res.status(200).json({ success: true, data: tickets });
@@ -1177,10 +1106,13 @@ router.get('/admin/v1/tickets', async (req, res) => {
  * PUT /admin/v1/tickets/:id
  * Update a ticket's status and add an operator response
  */
+const TICKET_SLA_HOURS = { urgent: 4, high: 24, normal: 72, low: 168 };
+
 router.put('/admin/v1/tickets/:id', async (req, res) => {
   const { id } = req.params;
-  const { status, response_notes } = req.body;
+  const { status, response_notes, priority, assigned_to } = req.body;
   const validStatuses = ['pending', 'processing', 'resolved', 'rejected'];
+  const validPriorities = ['low', 'normal', 'high', 'urgent'];
 
   if (status && !validStatuses.includes(status)) {
     return res.status(400).json({
@@ -1188,8 +1120,23 @@ router.put('/admin/v1/tickets/:id', async (req, res) => {
       error: { code: "BAD_REQUEST", message: "حالة الطلب غير صالحة" }
     });
   }
+  if (priority && !validPriorities.includes(priority)) {
+    return res.status(400).json({
+      success: false,
+      error: { code: "BAD_REQUEST", message: "أولوية الطلب غير صالحة" }
+    });
+  }
 
   try {
+    if (assigned_to) {
+      const assignee = await db.get('SELECT id FROM admin_users WHERE id = ?', [assigned_to]);
+      if (!assignee) {
+        return res.status(400).json({ success: false, error: { code: "INVALID_ASSIGNEE", message: "المشغل المحدد غير موجود" } });
+      }
+    }
+
+    const dueAt = priority ? new Date(Date.now() + (TICKET_SLA_HOURS[priority] || TICKET_SLA_HOURS.normal) * 3600 * 1000).toISOString() : null;
+
     let updated = null;
     if (db.isMock) {
       const ticket = db.memoryDB.tickets.find(t => t.id === id);
@@ -1198,20 +1145,27 @@ router.put('/admin/v1/tickets/:id', async (req, res) => {
       }
       if (status) ticket.status = status;
       if (response_notes !== undefined) ticket.response_notes = response_notes;
+      if (priority) { ticket.priority = priority; ticket.due_at = dueAt; }
+      if (assigned_to) ticket.assigned_to = assigned_to;
       updated = ticket;
     } else {
       await db.query(
-        `UPDATE tickets SET status = COALESCE($1, status), response_notes = COALESCE($2, response_notes) WHERE id = $3`,
-        [status || null, response_notes !== undefined ? response_notes : null, id]
+        `UPDATE tickets SET status = COALESCE($1, status), response_notes = COALESCE($2, response_notes),
+         priority = COALESCE($3, priority), assigned_to = COALESCE($4, assigned_to), due_at = COALESCE($5, due_at)
+         WHERE id = $6`,
+        [status || null, response_notes !== undefined ? response_notes : null, priority || null, assigned_to || null, dueAt, id]
       );
-      const result = await db.query(`SELECT * FROM tickets WHERE id = $1`, [id]);
+      const result = await db.query(
+        `SELECT t.*, a.full_name as assignee_name FROM tickets t LEFT JOIN admin_users a ON a.id = t.assigned_to WHERE t.id = $1`,
+        [id]
+      );
       if (result.rows.length === 0) {
         return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "الطلب غير موجود" } });
       }
       updated = result.rows[0];
     }
 
-    await logAdminAction(req.user.id, 'ticket.update', 'ticket', id, { status, response_notes }, req);
+    await logAdminAction(req.user.id, 'ticket.update', 'ticket', id, { status, response_notes, priority, assigned_to }, req);
 
     // Send Email to Clinic with Operator's response
     let clinicEmail = null;
@@ -1307,18 +1261,18 @@ router.get('/admin/v1/tenants/:id/doctors', async (req, res) => {
     if (db.isMock) {
       docs = db.memoryDB.doctors.filter(d => d.tenant_id === id);
     } else {
+      // `users` has a flat `role` text column — no `roles`/`role_id` table exists.
       const result = await db.query(
-        `SELECT u.id, u.full_name, u.phone, u.email, r.name as role_name 
-         FROM users u
-         LEFT JOIN roles r ON r.id = u.role_id
-         WHERE u.tenant_id = $1 AND (r.name = 'doctor' OR r.name = 'owner')`,
+        `SELECT id, full_name, phone, email, role
+         FROM users
+         WHERE tenant_id = $1 AND (role = 'doctor' OR role = 'owner')`,
         [id]
       );
       docs = result.rows.map(row => ({
         id: row.id,
         tenant_id: id,
         full_name: row.full_name,
-        specialty: row.role_name === 'owner' ? 'طبيب مالك' : 'طبيب فرعي'
+        specialty: row.role === 'owner' ? 'طبيب مالك' : 'طبيب فرعي'
       }));
     }
 
@@ -1339,7 +1293,7 @@ router.get('/admin/v1/tenants/:id/doctors', async (req, res) => {
  * POST /admin/v1/tenants/:id/doctors
  * Add a new doctor to a clinic (checks allow_multi_doctor flag)
  */
-router.post('/admin/v1/tenants/:id/doctors', async (req, res) => {
+router.post('/admin/v1/tenants/:id/doctors', requireAdminRole('admin', 'super_admin'), async (req, res) => {
   const { id } = req.params;
   const { full_name, specialty } = req.body;
 
@@ -1373,9 +1327,8 @@ router.post('/admin/v1/tenants/:id/doctors', async (req, res) => {
         doctorCount = db.memoryDB.doctors.filter(d => d.tenant_id === id).length;
       } else {
         const docCountRes = await db.query(
-          `SELECT COUNT(*) FROM users u 
-           LEFT JOIN roles r ON r.id = u.role_id 
-           WHERE u.tenant_id = $1 AND (r.name = 'doctor' OR r.name = 'owner')`,
+          `SELECT COUNT(*) as count FROM users
+           WHERE tenant_id = $1 AND (role = 'doctor' OR role = 'owner')`,
           [id]
         );
         doctorCount = parseInt(docCountRes.rows[0].count) || 0;
@@ -1402,22 +1355,14 @@ router.post('/admin/v1/tenants/:id/doctors', async (req, res) => {
         specialty: specialty || 'عمومي'
       });
     } else {
-      let roleRes = await db.query(`SELECT id FROM roles WHERE tenant_id = $1 AND name = 'doctor'`, [id]);
-      let roleId;
-      if (roleRes.rows.length === 0) {
-        const newRole = await db.query(`INSERT INTO roles (tenant_id, name) VALUES ($1, $2) RETURNING id`, [id, 'doctor']);
-        roleId = newRole.rows[0].id;
-      } else {
-        roleId = roleRes.rows[0].id;
-      }
-      
+      // `users` has a flat `role` text column — no `roles`/`role_id` table exists.
       const email = `${docId}@clinic.com`;
       const passHash = '$2a$10$FA.b3tjWz0KQKGNlm.RGxu7gGb9FJcFC4AW/LKpPpH8uUE1w2.Ye6'; // SecurePassword123!
-      
+
       await db.query(
-        `INSERT INTO users (id, tenant_id, role_id, full_name, email, password_hash, status) 
-         VALUES ($1, $2, $3, $4, $5, $6, 'active')`,
-        [docId, id, roleId, full_name, email, passHash]
+        `INSERT INTO users (id, tenant_id, full_name, email, password_hash, role, status)
+         VALUES ($1, $2, $3, $4, $5, 'doctor', 'active')`,
+        [docId, id, full_name, email, passHash]
       );
     }
 
@@ -1488,10 +1433,11 @@ router.get('/admin/v1/plans', async (req, res) => {
  * PUT /admin/v1/plans/:id
  * Configure/update plan prices and default feature flags
  */
-router.put('/admin/v1/plans/:id', async (req, res) => {
+router.put('/admin/v1/plans/:id', requireAdminRole('admin', 'super_admin'), async (req, res) => {
   const { id } = req.params;
-  const { 
-    price_egp, 
+  const {
+    name,
+    price_egp,
     price_usd,
     allow_multi_doctor,
     allow_insurance,
@@ -1513,72 +1459,43 @@ router.put('/admin/v1/plans/:id', async (req, res) => {
   }
 
   try {
-    let plan = null;
-    if (db.isMock) {
-      plan = db.memoryDB.plans.find(p => p.id === id);
-      if (plan) {
-        if (price_egp !== undefined) plan.price_egp = price_egp;
-        if (price_usd !== undefined) plan.price_usd = price_usd;
-        if (allow_multi_doctor !== undefined) plan.allow_multi_doctor = allow_multi_doctor;
-        if (allow_insurance !== undefined) plan.allow_insurance = allow_insurance;
-        if (allow_refunds !== undefined) plan.allow_refunds = allow_refunds;
-        if (allow_whatsapp !== undefined) plan.allow_whatsapp = allow_whatsapp;
-        if (allow_telegram !== undefined) plan.allow_telegram = allow_telegram;
-        if (allow_analytics !== undefined) plan.allow_analytics = allow_analytics;
-        if (allow_voice_bot !== undefined) plan.allow_voice_bot = allow_voice_bot;
-        if (allow_custom_branding !== undefined) plan.allow_custom_branding = allow_custom_branding;
-      }
-    } else {
-      try {
-        const updateRes = await db.query(
-          `UPDATE plans 
-           SET price_egp = $1, price_usd = $2, allow_multi_doctor = $3, allow_insurance = $4, allow_refunds = $5,
-               allow_whatsapp = $6, allow_telegram = $7, allow_analytics = $8, allow_voice_bot = $9, allow_custom_branding = $10,
-               updated_at = NOW()
-           WHERE id = $11 RETURNING *`,
-          [
-            price_egp, 
-            price_usd, 
-            allow_multi_doctor, 
-            allow_insurance, 
-            allow_refunds,
-            allow_whatsapp,
-            allow_telegram,
-            allow_analytics,
-            allow_voice_bot,
-            allow_custom_branding,
-            id
-          ]
-        );
-        plan = updateRes.rows[0];
-      } catch (err) {
-        plan = db.memoryDB.plans.find(p => p.id === id);
-        if (plan) {
-          if (price_egp !== undefined) plan.price_egp = price_egp;
-          if (price_usd !== undefined) plan.price_usd = price_usd;
-          if (allow_multi_doctor !== undefined) plan.allow_multi_doctor = allow_multi_doctor;
-          if (allow_insurance !== undefined) plan.allow_insurance = allow_insurance;
-          if (allow_refunds !== undefined) plan.allow_refunds = allow_refunds;
-          if (allow_whatsapp !== undefined) plan.allow_whatsapp = allow_whatsapp;
-          if (allow_telegram !== undefined) plan.allow_telegram = allow_telegram;
-          if (allow_analytics !== undefined) plan.allow_analytics = allow_analytics;
-          if (allow_voice_bot !== undefined) plan.allow_voice_bot = allow_voice_bot;
-          if (allow_custom_branding !== undefined) plan.allow_custom_branding = allow_custom_branding;
-        }
-      }
-    }
-
-    if (!plan) {
-      return res.status(404).json({
+    const existing = await db.get('SELECT * FROM plans WHERE id = ?', [id]);
+    const finalName = name || (existing && existing.name);
+    if (!finalName) {
+      return res.status(400).json({
         success: false,
-        error: { code: "NOT_FOUND", message: "الباقة غير موجودة" }
+        error: { code: "BAD_REQUEST", message: "اسم الباقة مطلوب" }
       });
     }
+
+    await db.run(
+      `INSERT INTO plans (id, name, price_egp, price_usd, allow_multi_doctor, allow_insurance, allow_refunds, allow_whatsapp, allow_telegram, allow_analytics, allow_voice_bot, allow_custom_branding, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?, CURRENT_TIMESTAMP)
+       ON CONFLICT(id) DO UPDATE SET name=excluded.name, price_egp=excluded.price_egp, price_usd=excluded.price_usd,
+         allow_multi_doctor=excluded.allow_multi_doctor, allow_insurance=excluded.allow_insurance, allow_refunds=excluded.allow_refunds,
+         allow_whatsapp=excluded.allow_whatsapp, allow_telegram=excluded.allow_telegram, allow_analytics=excluded.allow_analytics,
+         allow_voice_bot=excluded.allow_voice_bot, allow_custom_branding=excluded.allow_custom_branding, updated_at=CURRENT_TIMESTAMP`,
+      [
+        id, finalName,
+        price_egp ?? (existing ? existing.price_egp : 0),
+        price_usd ?? (existing ? existing.price_usd : 0),
+        allow_multi_doctor !== undefined ? (allow_multi_doctor ? 1 : 0) : (existing ? existing.allow_multi_doctor : 0),
+        allow_insurance !== undefined ? (allow_insurance ? 1 : 0) : (existing ? existing.allow_insurance : 0),
+        allow_refunds !== undefined ? (allow_refunds ? 1 : 0) : (existing ? existing.allow_refunds : 0),
+        allow_whatsapp !== undefined ? (allow_whatsapp ? 1 : 0) : (existing ? existing.allow_whatsapp : 0),
+        allow_telegram !== undefined ? (allow_telegram ? 1 : 0) : (existing ? existing.allow_telegram : 0),
+        allow_analytics !== undefined ? (allow_analytics ? 1 : 0) : (existing ? existing.allow_analytics : 0),
+        allow_voice_bot !== undefined ? (allow_voice_bot ? 1 : 0) : (existing ? existing.allow_voice_bot : 0),
+        allow_custom_branding !== undefined ? (allow_custom_branding ? 1 : 0) : (existing ? existing.allow_custom_branding : 0)
+      ]
+    );
+
+    const plan = await db.get('SELECT * FROM plans WHERE id = ?', [id]);
 
     // Write audit log
     await logAdminAction(
       req.user.id,
-      'plan.update_config',
+      existing ? 'plan.update_config' : 'plan.create',
       'plan',
       id,
       { price_egp, price_usd },
@@ -1595,6 +1512,345 @@ router.put('/admin/v1/plans/:id', async (req, res) => {
     return res.status(500).json({
       success: false,
       error: { code: "SERVER_ERROR", message: "حدث خطأ أثناء تعديل خصائص الباقة" }
+    });
+  }
+});
+
+/**
+ * DELETE /admin/v1/plans/:id
+ * Delete a custom plan (system plans and plans with active tenants are protected)
+ */
+router.delete('/admin/v1/plans/:id', requireAdminRole('admin', 'super_admin'), async (req, res) => {
+  const { id } = req.params;
+
+  if (['basic', 'pro', 'enterprise'].includes(id.toLowerCase())) {
+    return res.status(400).json({
+      success: false,
+      error: { code: "SYSTEM_PLAN", message: "لا يمكن حذف باقات النظام الأساسية." }
+    });
+  }
+
+  try {
+    const plan = await db.get('SELECT * FROM plans WHERE id = ?', [id]);
+    if (!plan) {
+      return res.status(404).json({
+        success: false,
+        error: { code: "NOT_FOUND", message: "الباقة غير موجودة" }
+      });
+    }
+
+    const inUse = await db.get(`SELECT COUNT(*) as count FROM tenants WHERE subscription_plan = ? AND status = 'active'`, [id]);
+    if (inUse && inUse.count > 0) {
+      return res.status(400).json({
+        success: false,
+        error: { code: "PLAN_IN_USE", message: `لا يمكن حذف الباقة لوجود ${inUse.count} عيادة نشطة مشتركة بها حالياً.` }
+      });
+    }
+
+    await db.run('DELETE FROM plans WHERE id = ?', [id]);
+    await logAdminAction(req.user.id, 'plan.delete', 'plan', id, { name: plan.name }, req);
+
+    return res.status(200).json({ success: true, message: "تم حذف الباقة بنجاح" });
+  } catch (error) {
+    console.error('Error deleting plan:', error);
+    return res.status(500).json({
+      success: false,
+      error: { code: "SERVER_ERROR", message: "حدث خطأ أثناء حذف الباقة" }
+    });
+  }
+});
+
+/**
+ * ==========================================
+ * Ops team management (admin_users)
+ * ==========================================
+ */
+
+/**
+ * GET /admin/v1/admin-users
+ * List all platform operators — super_admin only
+ */
+router.get('/admin/v1/admin-users', requireAdminRole('super_admin'), async (req, res) => {
+  try {
+    const rows = await db.all('SELECT id, email, full_name, role, status, created_at FROM admin_users ORDER BY created_at ASC');
+    return res.status(200).json({ success: true, data: rows });
+  } catch (error) {
+    console.error('Error fetching admin users:', error);
+    return res.status(500).json({
+      success: false,
+      error: { code: "SERVER_ERROR", message: "حدث خطأ أثناء جلب فريق العمليات" }
+    });
+  }
+});
+
+/**
+ * GET /admin/v1/admin-users/assignable
+ * Lightweight active-operator list for ticket-assignee pickers — open to any operator
+ */
+router.get('/admin/v1/admin-users/assignable', async (req, res) => {
+  try {
+    const rows = await db.all(`SELECT id, full_name FROM admin_users WHERE status = 'active' ORDER BY full_name ASC`);
+    return res.status(200).json({ success: true, data: rows });
+  } catch (error) {
+    console.error('Error fetching assignable admin users:', error);
+    return res.status(500).json({
+      success: false,
+      error: { code: "SERVER_ERROR", message: "حدث خطأ أثناء جلب قائمة المشغلين" }
+    });
+  }
+});
+
+/**
+ * POST /admin/v1/admin-users
+ * Create a new platform operator — super_admin only
+ */
+router.post('/admin/v1/admin-users', requireAdminRole('super_admin'), async (req, res) => {
+  const { email, password, full_name, role } = req.body;
+  const validRoles = ['super_admin', 'admin', 'support'];
+
+  if (!email || !password || !full_name || !role) {
+    return res.status(400).json({ success: false, error: { code: "BAD_REQUEST", message: "كل الحقول مطلوبة" } });
+  }
+  if (!validRoles.includes(role)) {
+    return res.status(400).json({ success: false, error: { code: "BAD_REQUEST", message: "دور غير صالح" } });
+  }
+  if (typeof password !== 'string' || password.length < 8) {
+    return res.status(400).json({ success: false, error: { code: "WEAK_PASSWORD", message: "كلمة المرور يجب أن تكون 8 أحرف على الأقل" } });
+  }
+
+  try {
+    const existing = await db.get('SELECT id FROM admin_users WHERE email = ?', [email.toLowerCase()]);
+    if (existing) {
+      return res.status(400).json({ success: false, error: { code: "DUPLICATE_EMAIL", message: "البريد الإلكتروني مستخدم بالفعل" } });
+    }
+
+    const id = `admin-${Math.random().toString(36).substring(2, 10)}`;
+    const passwordHash = bcrypt.hashSync(password, 10);
+    await db.run(
+      `INSERT INTO admin_users (id, email, password_hash, full_name, role, status) VALUES (?,?,?,?,?, 'active')`,
+      [id, email.toLowerCase(), passwordHash, full_name, role]
+    );
+
+    await logAdminAction(req.user.id, 'admin_user.create', 'admin_user', id, { email, full_name, role }, req);
+
+    return res.status(201).json({
+      success: true,
+      data: { id, email: email.toLowerCase(), full_name, role, status: 'active' }
+    });
+  } catch (error) {
+    console.error('Error creating admin user:', error);
+    return res.status(500).json({
+      success: false,
+      error: { code: "SERVER_ERROR", message: "حدث خطأ أثناء إنشاء حساب المشغل" }
+    });
+  }
+});
+
+/**
+ * PUT /admin/v1/admin-users/:id
+ * Edit an operator's name/role/status — super_admin only, with a self-lockout guard
+ */
+router.put('/admin/v1/admin-users/:id', requireAdminRole('super_admin'), async (req, res) => {
+  const { id } = req.params;
+  const { full_name, role, status } = req.body;
+
+  if (role && !['super_admin', 'admin', 'support'].includes(role)) {
+    return res.status(400).json({ success: false, error: { code: "BAD_REQUEST", message: "دور غير صالح" } });
+  }
+  if (status && !['active', 'inactive'].includes(status)) {
+    return res.status(400).json({ success: false, error: { code: "BAD_REQUEST", message: "حالة غير صالحة" } });
+  }
+
+  try {
+    const target = await db.get('SELECT * FROM admin_users WHERE id = ?', [id]);
+    if (!target) {
+      return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "المشغل غير موجود" } });
+    }
+
+    const leavingSuperAdmin = target.role === 'super_admin' && ((role && role !== 'super_admin') || (status && status !== 'active'));
+    if (leavingSuperAdmin) {
+      const remaining = await db.get(
+        `SELECT COUNT(*) as count FROM admin_users WHERE role = 'super_admin' AND status = 'active' AND id != ?`,
+        [id]
+      );
+      if (!remaining || remaining.count === 0) {
+        return res.status(400).json({
+          success: false,
+          error: { code: "LAST_SUPER_ADMIN", message: "لا يمكن إزالة صلاحيات آخر مشغل بدرجة Super Admin نشط في المنصة." }
+        });
+      }
+    }
+
+    await db.run(
+      `UPDATE admin_users SET full_name = COALESCE(?, full_name), role = COALESCE(?, role), status = COALESCE(?, status) WHERE id = ?`,
+      [full_name || null, role || null, status || null, id]
+    );
+    const updated = await db.get('SELECT id, email, full_name, role, status, created_at FROM admin_users WHERE id = ?', [id]);
+
+    await logAdminAction(req.user.id, 'admin_user.update', 'admin_user', id, { full_name, role, status }, req);
+
+    return res.status(200).json({ success: true, data: updated });
+  } catch (error) {
+    console.error('Error updating admin user:', error);
+    return res.status(500).json({
+      success: false,
+      error: { code: "SERVER_ERROR", message: "حدث خطأ أثناء تعديل بيانات المشغل" }
+    });
+  }
+});
+
+/**
+ * ==========================================
+ * Revenue / churn reporting (proxy — no invoicing data exists)
+ * ==========================================
+ */
+
+/**
+ * GET /admin/v1/reports/revenue-churn
+ * 12-month revenue-activity + churn proxy, derived from subscription_history
+ * and admin_audit_logs (no invoices table exists — billing is out of scope).
+ */
+router.get('/admin/v1/reports/revenue-churn', requireAdminRole('admin', 'super_admin'), async (req, res) => {
+  try {
+    const events = await db.all(
+      `SELECT strftime('%Y-%m', created_at) as month, new_plan
+       FROM subscription_history WHERE created_at >= date('now','-12 months')`
+    );
+    const planPriceRows = await db.all('SELECT id, price_usd FROM plans');
+    const priceMap = {};
+    planPriceRows.forEach(p => { priceMap[p.id.toLowerCase()] = p.price_usd; });
+
+    const revenueByMonth = {};
+    events.forEach(e => {
+      const m = e.month;
+      const plan = (e.new_plan || '').toLowerCase();
+      if (!m) return;
+      revenueByMonth[m] = revenueByMonth[m] || { basic: 0, pro: 0, enterprise: 0, proxy_value_usd: 0 };
+      if (['basic', 'pro', 'enterprise'].includes(plan)) revenueByMonth[m][plan]++;
+      revenueByMonth[m].proxy_value_usd += priceMap[plan] || 0;
+    });
+    const revenue_trend = Object.keys(revenueByMonth).sort().map(m => ({ month: m, ...revenueByMonth[m] }));
+
+    const churnRows = await db.all(
+      `SELECT strftime('%Y-%m', created_at) as month,
+         SUM(CASE WHEN action = 'tenant.deactivate' THEN 1 ELSE 0 END) as suspensions,
+         SUM(CASE WHEN action = 'tenant.activate' THEN 1 ELSE 0 END) as reactivations
+       FROM admin_audit_logs
+       WHERE target_type = 'tenant' AND created_at >= date('now','-12 months')
+       GROUP BY month ORDER BY month ASC`
+    );
+    const totalTenantsRow = await db.get('SELECT COUNT(*) as count FROM tenants');
+    const totalTenants = (totalTenantsRow && totalTenantsRow.count) || 1;
+    const churn_trend = churnRows.filter(r => r.month).map(r => ({
+      ...r,
+      churn_rate_pct: +(((r.suspensions || 0) / totalTenants) * 100).toFixed(1)
+    }));
+
+    const activeClinicsRow = await db.get(`SELECT COUNT(*) as count FROM tenants WHERE status = 'active'`);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        revenue_trend,
+        churn_trend,
+        totals: { current_active_clinics: (activeClinicsRow && activeClinicsRow.count) || 0 }
+      }
+    });
+  } catch (error) {
+    console.error('Error building revenue/churn report:', error);
+    return res.status(500).json({
+      success: false,
+      error: { code: "SERVER_ERROR", message: "حدث خطأ أثناء إعداد التقرير" }
+    });
+  }
+});
+
+/**
+ * ==========================================
+ * Broadcast messaging to all tenant owners
+ * ==========================================
+ */
+
+/**
+ * POST /admin/v1/broadcast
+ * Send a message to all (optionally filtered) tenant owners via email and/or in-app notification
+ */
+router.post('/admin/v1/broadcast', requireAdminRole('admin', 'super_admin'), async (req, res) => {
+  const { subject, message, filter_plan = 'all', filter_status = 'all', channel = 'both' } = req.body;
+
+  if (!subject || !message) {
+    return res.status(400).json({ success: false, error: { code: "BAD_REQUEST", message: "العنوان والرسالة مطلوبان" } });
+  }
+  if (!['email', 'in_app', 'both'].includes(channel)) {
+    return res.status(400).json({ success: false, error: { code: "BAD_REQUEST", message: "قناة الإرسال غير صالحة" } });
+  }
+
+  try {
+    const params = [];
+    let where = '1=1';
+    if (filter_plan !== 'all') { where += ' AND t.subscription_plan = ?'; params.push(filter_plan); }
+    if (filter_status !== 'all') { where += ' AND t.status = ?'; params.push(filter_status); }
+
+    const recipients = await db.all(
+      `SELECT t.id as tenant_id, t.name as tenant_name, u.id as user_id, u.email, u.full_name
+       FROM tenants t JOIN users u ON u.tenant_id = t.id AND u.role = 'owner'
+       WHERE ${where}`,
+      params
+    );
+
+    recipients.forEach(r => {
+      if (channel !== 'in_app') {
+        emailService.notifyBroadcastMessage({
+          tenant: { name: r.tenant_name },
+          owner: { email: r.email, full_name: r.full_name },
+          subject,
+          message
+        }).catch(e => console.error('Broadcast email error:', e));
+      }
+      if (channel !== 'email') {
+        notificationService.createNotification({
+          tenantId: r.tenant_id,
+          userId: r.user_id,
+          title: subject,
+          message,
+          type: 'info'
+        }).catch(e => console.error('Broadcast in-app notification error:', e));
+      }
+    });
+
+    const logId = `bcast-${Math.random().toString(36).substring(2, 10)}`;
+    await db.run(
+      `INSERT INTO admin_broadcast_logs (id, admin_id, subject, message, filter_plan, filter_status, channel, recipient_count) VALUES (?,?,?,?,?,?,?,?)`,
+      [logId, req.user.id, subject, message, filter_plan, filter_status, channel, recipients.length]
+    );
+    await logAdminAction(req.user.id, 'broadcast.send', 'broadcast', logId, { subject, filter_plan, filter_status, channel, recipient_count: recipients.length }, req);
+
+    return res.status(200).json({ success: true, data: { recipient_count: recipients.length } });
+  } catch (error) {
+    console.error('Error sending broadcast:', error);
+    return res.status(500).json({
+      success: false,
+      error: { code: "SERVER_ERROR", message: "حدث خطأ أثناء إرسال البث الجماعي" }
+    });
+  }
+});
+
+/**
+ * GET /admin/v1/broadcast/history
+ * Last 20 broadcasts sent, with operator name resolved
+ */
+router.get('/admin/v1/broadcast/history', requireAdminRole('admin', 'super_admin'), async (req, res) => {
+  try {
+    const rows = await db.all(
+      `SELECT b.*, a.full_name as operator_name FROM admin_broadcast_logs b
+       LEFT JOIN admin_users a ON a.id = b.admin_id ORDER BY b.created_at DESC LIMIT 20`
+    );
+    return res.status(200).json({ success: true, data: rows });
+  } catch (error) {
+    console.error('Error fetching broadcast history:', error);
+    return res.status(500).json({
+      success: false,
+      error: { code: "SERVER_ERROR", message: "حدث خطأ أثناء جلب سجل البث الجماعي" }
     });
   }
 });

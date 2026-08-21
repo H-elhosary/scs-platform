@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>بث جماعي — لوحة عمليات المنصة</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="core/core.css">
+  <link rel="stylesheet" href="core/ops.css">
+</head>
+<body class="clinic-body">
+  <div class="clinic-layout">
+    <main class="clinic-main">
+
+      <div class="view-header">
+        <div>
+          <h1><i class="fa-solid fa-bullhorn"></i> بث رسالة جماعية لمالكي العيادات</h1>
+          <p class="view-subtitle">إرسال إشعار أو تعميم لكل العيادات، أو لمجموعة مصفّاة منها حسب الباقة أو الحالة، عبر البريد الإلكتروني و/أو الإشعارات داخل لوحة العيادة.</p>
+        </div>
+        <div class="view-header-actions"></div>
+      </div>
+
+      <div id="alert-panel" class="alert-box hide"><div class="alert-icon"><i class="fa-solid fa-triangle-exclamation"></i></div><div class="alert-msg" id="alert-msg"></div></div>
+
+      <section class="reports-grid">
+        <div class="report-card">
+          <div class="report-card-header"><h3><i class="fa-solid fa-paper-plane" style="color:var(--primary);"></i> إنشاء بث جديد</h3></div>
+          <div class="report-card-body">
+            <form id="broadcast-form">
+              <div class="form-group"><label for="bcast-subject">عنوان الرسالة</label><input type="text" id="bcast-subject" required placeholder="مثال: صيانة مجدولة للمنصة"></div>
+              <div class="form-group"><label for="bcast-message">نص الرسالة</label><textarea id="bcast-message" required rows="6" style="resize:vertical;" placeholder="اكتب محتوى الرسالة الموجهة لمالكي العيادات هنا..."></textarea></div>
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="bcast-filter-plan">الباقة المستهدفة</label>
+                  <select id="bcast-filter-plan"><option value="all">كل الباقات</option></select>
+                </div>
+                <div class="form-group">
+                  <label for="bcast-filter-status">الحالة المستهدفة</label>
+                  <select id="bcast-filter-status">
+                    <option value="all">كل الحالات</option>
+                    <option value="active">نشطة فقط</option>
+                    <option value="suspended">معلّقة فقط</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>قناة الإرسال</label>
+                <div style="display:flex; gap:16px; padding:10px 0;">
+                  <label style="display:flex; align-items:center; gap:6px; font-weight:600; font-size:13px; cursor:pointer;"><input type="radio" name="bcast-channel" value="both" checked> بريد + إشعار داخلي</label>
+                  <label style="display:flex; align-items:center; gap:6px; font-weight:600; font-size:13px; cursor:pointer;"><input type="radio" name="bcast-channel" value="email"> بريد إلكتروني فقط</label>
+                  <label style="display:flex; align-items:center; gap:6px; font-weight:600; font-size:13px; cursor:pointer;"><input type="radio" name="bcast-channel" value="in_app"> إشعار داخلي فقط</label>
+                </div>
+              </div>
+              <button type="submit" class="btn-primary" id="broadcast-submit-btn" style="width:100%; justify-content:center;"><span class="btn-text">إرسال البث الجماعي</span><div class="spinner hide"></div></button>
+            </form>
+          </div>
+        </div>
+
+        <div class="report-card">
+          <div class="report-card-header"><h3><i class="fa-solid fa-clock-rotate-left" style="color:var(--scs-text-muted);"></i> آخر عمليات البث</h3></div>
+          <div class="report-card-body">
+            <div class="timeline-container" id="broadcast-history-container" style="max-height:520px; overflow-y:auto;">
+              <p style="text-align:center; color:var(--scs-text-muted); padding:20px 0;">جاري التحميل...</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="core/ops-shared.js"></script>
+  <script src="admin_broadcast.js"></script>
+</body>
+</html>

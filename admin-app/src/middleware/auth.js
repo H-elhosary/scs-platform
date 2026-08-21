@@ -57,6 +57,23 @@ const requireOperator = (req, res, next) => {
 };
 
 /**
+ * Middleware factory to enforce operator-role-tier access (super_admin/admin/support).
+ * Must run after authenticateToken + requireOperator, since it reads req.user.role.
+ */
+const requireAdminRole = (...allowedRoles) => (req, res, next) => {
+  if (!req.user || !allowedRoles.includes(req.user.role)) {
+    return res.status(403).json({
+      success: false,
+      error: {
+        code: "FORBIDDEN_INSUFFICIENT_ROLE",
+        message: "ليس لديك صلاحية كافية لتنفيذ هذا الإجراء"
+      }
+    });
+  }
+  next();
+};
+
+/**
  * Middleware to enforce Clinic / Tenant access only
  */
 const requireClinicStaff = (req, res, next) => {
@@ -84,6 +101,7 @@ const setTenantContext = async (client, tenantId) => {
 module.exports = {
   authenticateToken,
   requireOperator,
+  requireAdminRole,
   requireClinicStaff,
   setTenantContext
 };

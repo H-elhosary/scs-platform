@@ -10,54 +10,243 @@ let allPlans = [];
 
 const alertPanel = document.getElementById('alert-panel');
 const alertMsg = document.getElementById('alert-msg');
-function showAlert(message) { alertMsg.innerText = message; alertPanel.classList.remove('hide'); }
-function hideAlert() { alertPanel.classList.add('hide'); }
+function showAlert(message) { if (alertMsg && alertPanel) { alertMsg.innerText = message; alertPanel.classList.remove('hide'); } }
+function hideAlert() { if (alertPanel) alertPanel.classList.add('hide'); }
 
-// Which page are we on? Each page has one element only it defines.
+// Which page are we on?
 const onHome = !!document.getElementById('kpi-total-clinics');
 const onClinics = !!document.getElementById('clinics-table-body');
 const onPlans = !!document.getElementById('ops-plans-cards-container');
 
 document.addEventListener('opsShellReady', () => {
-  if (onHome) { loadDashboardStats(); loadHomeAuditLogs(); }
+  if (onHome) {
+    setupHeaderGreeting();
+    loadDashboardStats();
+
+    // Audit log is admin/super_admin-only server-side
+    if (operatorUser.rawRole === 'support') {
+      document.getElementById('btn-view-all-audits')?.style.setProperty('display', 'none');
+    }
+  }
   if (onClinics) { loadClinicsList(); }
   if (onPlans) { loadPlansTab(); }
   if (document.getElementById('clinic-plan')) { loadPlansForOnboardSelect(); }
 });
 
 // =============================================
-// HOME — KPIs, reports, audit preview
+// HOME — Header greeting (compact, matches every other page's .view-header)
+// =============================================
+function setupHeaderGreeting() {
+  const greetingEl = document.getElementById('header-greeting-text');
+  const nameEl = document.getElementById('header-operator-name');
+  const descEl = document.getElementById('header-role-desc');
+
+  const curHour = new Date().getHours();
+  const timeGreeting = curHour < 12 ? 'صباح الخير،' : 'مساء الخير،';
+
+  if (greetingEl) greetingEl.innerText = timeGreeting;
+  if (nameEl) nameEl.innerText = operatorUser.full_name || 'مشغل النظام';
+
+  const role = operatorUser.rawRole || 'admin';
+  const roleDesc = {
+    super_admin: 'صلاحيات كاملة على العيادات، الاشتراكات، الباقات، وفريق العمليات.',
+    admin: 'متابعة العيادات، الاشتراكات، وتذاكر الدعم.',
+    support: 'الرد على تذاكر الدعم والوصول لبيانات العيادات.'
+  }[role] || '';
+  if (descEl) descEl.innerText = roleDesc;
+}
+
+// =============================================
+// HOME — KPIs, reports, and recent clinics
 // =============================================
 async function loadDashboardStats() {
   try {
-    const res = await opsFetch('/admin/v1/tenants');
-    const data = await res.json();
+    const [tenantsRes, ticketsRes] = await Promise.all([
+      opsFetch('/admin/v1/tenants'),
+      opsFetch('/admin/v1/tickets').catch(() => null)
+    ]);
+    const data = await tenantsRes.json();
     if (!data.success) { showAlert(data.error.message); return; }
 
     const stats = data.data.stats;
-    document.getElementById('kpi-total-clinics').innerText = stats.total_clinics;
-    document.getElementById('kpi-active-clinics').innerText = stats.active_clinics;
-    document.getElementById('kpi-suspended-clinics').innerText = stats.suspended_clinics || 0;
-    document.getElementById('kpi-expiring-soon').innerText = stats.pending_expiry;
-    document.getElementById('report-mrr-value').innerText = `$${stats.estimated_mrr}`;
+    const tenants = data.data.tenants || [];
+    allTenants = tenants;
 
-    const plans = stats.plans || { basic: 0, pro: 0, enterprise: 0 };
-    document.getElementById('rev-basic-details').innerText = `${plans.basic} عيادة ($${plans.basic * 50}/شهر)`;
-    document.getElementById('rev-pro-details').innerText = `${plans.pro} عيادة ($${plans.pro * 100}/شهر)`;
-    document.getElementById('rev-enterprise-details').innerText = `${plans.enterprise} عيادة ($${plans.enterprise * 250}/شهر)`;
+    let tickets = [];
+    if (ticketsRes) {
+      const ticketsData = await ticketsRes.json().catch(() => null);
+      if (ticketsData?.success) tickets = ticketsData.data || [];
+    }
+    const pendingTickets = tickets.filter(t => t.status === 'pending');
+    const now = new Date();
+    const overdueTickets = tickets.filter(t => t.due_at && new Date(t.due_at) < now && ['pending', 'processing'].includes(t.status));
 
-    const total = (plans.basic + plans.pro + plans.enterprise) || 1;
-    const setDist = (key, val) => {
-      const perc = Math.round((val / total) * 100);
-      document.getElementById(`dist-${key}-perc`).innerText = `${perc}%`;
-      document.getElementById(`dist-${key}-bar`).style.width = `${perc}%`;
-    };
-    setDist('basic', plans.basic);
-    setDist('pro', plans.pro);
-    setDist('enterprise', plans.enterprise);
+    document.getElementById('kpi-total-clinics').innerText = stats.total_clinics || tenants.length;
+    document.getElementById('kpi-active-clinics').innerText = stats.active_clinics || tenants.filter(t => t.status === 'active').length;
+    document.getElementById('kpi-suspended-clinics').innerText = stats.suspended_clinics || tenants.filter(t => t.status === 'suspended').length || 0;
+
+    // Fourth Card Customization based on Role
+    const role = operatorUser.rawRole || 'admin';
+    const fourthLabel = document.getElementById('kpi-fourth-label');
+    const fourthVal = document.getElementById('kpi-fourth-value');
+    const fourthTrend = document.getElementById('kpi-fourth-trend');
+    const fourthIcon = document.getElementById('kpi-fourth-icon');
+
+    if (role === 'support') {
+      if (fourthLabel) fourthLabel.innerText = 'تذاكر الدعم والطلبات';
+      if (fourthVal) fourthVal.innerText = `${pendingTickets.length} معلقة`;
+      if (fourthTrend) fourthTrend.innerHTML = overdueTickets.length > 0
+        ? `<i class="fa-solid fa-triangle-exclamation"></i> ${overdueTickets.length} متأخرة عن الحد الزمني`
+        : '<i class="fa-solid fa-circle-check"></i> لا توجد تذاكر متأخرة';
+      if (fourthIcon) {
+        fourthIcon.innerHTML = '<i class="fa-solid fa-headset"></i>';
+        fourthIcon.style.background = 'var(--scs-warning-glow)';
+        fourthIcon.style.color = 'var(--scs-warning)';
+      }
+    } else {
+      if (fourthLabel) fourthLabel.innerText = 'الدخل المتكرر (MRR)';
+      if (fourthVal) fourthVal.innerText = `$${stats.estimated_mrr || 0}`;
+    }
+
+    renderNeedsAttention(role, overdueTickets.length, stats.pending_expiry || 0);
+
+    // Render Recent Clinics Table
+    renderRecentClinicsSnapshot(tenants);
+
   } catch (error) {
     console.error('loadDashboardStats error:', error);
     showAlert('حدث خطأ في الاتصال بالخادم، يرجى المحاولة لاحقاً');
+  }
+}
+
+// =============================================
+// HOME — Needs-Attention panel (real, actionable data only:
+// SLA-overdue tickets + clinics expiring within 30 days — both were
+// already computed/tracked server-side but never surfaced anywhere).
+// Only takes screen space for things that are actually wrong: a single
+// slim "all clear" line on a normal day, one card per real problem
+// otherwise — never a mix of green and red cards side by side.
+// =============================================
+function renderNeedsAttention(role, overdueTicketsCount, expiringSoonCount) {
+  const container = document.getElementById('attention-grid');
+  if (!container) return;
+
+  const cards = [];
+
+  if (overdueTicketsCount > 0) {
+    cards.push({
+      href: 'admin_tickets.html',
+      icon: 'fa-solid fa-stopwatch',
+      title: `${overdueTicketsCount} تذكرة متأخرة عن SLA`,
+      desc: 'تحتاج رد فوري من فريق الدعم',
+      level: 'danger'
+    });
+  }
+
+  if (role !== 'support' && expiringSoonCount > 0) {
+    cards.push({
+      href: 'admin_clinics.html',
+      icon: 'fa-solid fa-calendar-days',
+      title: `${expiringSoonCount} عيادة تنتهي خلال 30 يوماً`,
+      desc: 'راجع التجديد قبل انتهاء الاشتراك',
+      level: 'warn'
+    });
+  }
+
+  if (cards.length === 0) {
+    container.innerHTML = `
+      <div class="attention-allclear">
+        <i class="fa-solid fa-circle-check"></i>
+        <span>لا توجد إجراءات عاجلة الآن — كل شيء تحت السيطرة</span>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = `<div class="attention-grid-inner">${cards.map(c => `
+    <a href="${c.href}" class="attention-card attention-${c.level}">
+      <div class="attention-icon"><i class="${c.icon}"></i></div>
+      <div class="attention-text">
+        <strong>${c.title}</strong>
+        <span>${c.desc}</span>
+      </div>
+      <i class="fa-solid fa-arrow-left attention-arrow"></i>
+    </a>
+  `).join('')}</div>`;
+}
+
+// =============================================
+// HOME — Recent Clinics Snapshot & Search
+// =============================================
+function renderRecentClinicsSnapshot(tenants) {
+  const tbody = document.getElementById('home-clinics-body');
+  if (!tbody) return;
+
+  if (tenants.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center" style="padding:24px; color:var(--scs-text-muted);">لا توجد عيادات مسجلة بعد.</td></tr>';
+    return;
+  }
+
+  const specialtyMap = {
+    dental: 'طب أسنان',
+    orthopedic: 'عظام ومفاصل',
+    dermatology: 'جلدية وتجميل',
+    derma: 'جلدية وتجميل',
+    pediatric: 'أطفال',
+    general: 'ممارس عام'
+  };
+
+  const renderRows = (list) => {
+    if (list.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center" style="padding:20px; color:var(--scs-text-muted);">لا توجد نتائج مطابقة للبحث.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = list.slice(0, 6).map(t => {
+      const specAr = specialtyMap[t.specialty] || t.specialty || 'عام';
+      const isSuspended = t.status === 'suspended';
+      const statusBadge = isSuspended 
+        ? '<span class="status-suspended-badge" style="font-size:11px; padding:3px 8px;"><i class="fa-solid fa-circle-pause"></i> معلق</span>'
+        : '<span class="status-active-badge" style="font-size:11px; padding:3px 8px;"><i class="fa-solid fa-circle-check"></i> نشط</span>';
+      
+      const planClass = `plan-${t.subscription_plan || 'basic'}`;
+
+      return `
+        <tr>
+          <td>
+            <strong style="color:var(--scs-text-heading); font-size:13px;">${escapeHtml(t.name)}</strong>
+            <br><small style="color:var(--scs-text-dim); font-size:10.5px;">/${escapeHtml(t.slug || '')}</small>
+          </td>
+          <td><span class="specialty-label" style="font-size:11px;">${escapeHtml(specAr)}</span></td>
+          <td><span class="plan-badge ${planClass}" style="font-size:10.5px; font-weight:800;">${escapeHtml((t.subscription_plan || 'BASIC').toUpperCase())}</span></td>
+          <td>${statusBadge}</td>
+          <td>
+            <a href="clinic_details.html?id=${t.id}" class="btn-outline-cta" style="font-size:11px; padding:4px 9px; text-decoration:none; display:inline-flex; align-items:center; gap:4px;">
+              <i class="fa-solid fa-gear"></i> <span>إدارة</span>
+            </a>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  };
+
+  renderRows(tenants);
+
+  // Search filter event
+  const searchInput = document.getElementById('quick-clinic-search');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      const q = e.target.value.toLowerCase().trim();
+      if (!q) {
+        renderRows(tenants);
+        return;
+      }
+      const filtered = tenants.filter(t => 
+        (t.name && t.name.toLowerCase().includes(q)) ||
+        (t.slug && t.slug.toLowerCase().includes(q)) ||
+        (t.specialty && t.specialty.toLowerCase().includes(q)) ||
+        (t.owner_email && t.owner_email.toLowerCase().includes(q))
+      );
+      renderRows(filtered);
+    });
   }
 }
 
@@ -66,41 +255,17 @@ function actionLabelFor(action) {
     'tenant.create': 'إنشاء عيادة', 'tenant.deactivate': 'تعليق حساب', 'tenant.activate': 'تنشيط حساب',
     'tenant.update': 'تعديل عيادة', 'tenant.update_features': 'تعديل صلاحيات', 'tenant.delete': 'حذف عيادة',
     'tenant.add_doctor': 'إضافة طبيب', 'subscription.change': 'تعديل اشتراك', 'user.password_reset': 'إعادة كلمة مرور',
-    'plan.update_config': 'تعديل باقة', 'ticket.update': 'تحديث طلب'
+    'plan.update_config': 'تعديل باقة', 'ticket.update': 'تحديث طلب', 'doctor.reset_password': 'إعادة تعيين كلمة المرور'
   };
   return map[action] || action;
 }
 function actionBadgeClassFor(action) {
   if (['tenant.create', 'tenant.activate'].includes(action)) return 'plan-badge plan-pro';
-  if (['tenant.update', 'tenant.update_features', 'subscription.change', 'user.password_reset', 'plan.update_config'].includes(action)) return 'plan-badge plan-enterprise';
+  if (['tenant.update', 'tenant.update_features', 'subscription.change', 'user.password_reset', 'plan.update_config', 'doctor.reset_password'].includes(action)) return 'plan-badge plan-enterprise';
   return 'plan-badge plan-basic';
 }
 
-async function loadHomeAuditLogs() {
-  const tableBody = document.getElementById('home-audit-logs-body');
-  try {
-    const res = await opsFetch('/admin/v1/audit-logs');
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error?.message);
-
-    const latest = data.data.slice(0, 5);
-    if (latest.length === 0) {
-      tableBody.innerHTML = '<tr><td colspan="4" class="text-center" style="padding:20px; color:var(--scs-text-muted);">لا توجد عمليات أمان مسجلة.</td></tr>';
-      return;
-    }
-    tableBody.innerHTML = latest.map(log => `
-      <tr>
-        <td><strong>${escapeHtml(log.operator_name)}</strong></td>
-        <td><span class="${actionBadgeClassFor(log.action)}" style="font-size:10px;">${actionLabelFor(log.action)}</span></td>
-        <td><small class="audit-details-code">${escapeHtml(log.details || '—')}</small></td>
-        <td><small>${new Date(log.created_at).toLocaleTimeString('ar-EG')}</small></td>
-      </tr>`).join('');
-  } catch (error) {
-    tableBody.innerHTML = '<tr><td colspan="4" class="text-center" style="padding:20px; color:var(--scs-danger);">فشل تحميل سجل العمليات.</td></tr>';
-  }
-}
-
-// Audit modal (shared by home + could be reused elsewhere)
+// Audit modal (opened on demand via the "سجل العمليات" button)
 async function openAuditLogsModal() {
   const tableBody = document.getElementById('audit-logs-table-body');
   tableBody.innerHTML = '<tr><td colspan="6" class="text-center" style="padding:16px;">جاري تحميل سجل العمليات...</td></tr>';
@@ -130,6 +295,38 @@ document.getElementById('btn-quick-view-audit')?.addEventListener('click', openA
 document.getElementById('btn-view-all-audits')?.addEventListener('click', openAuditLogsModal);
 document.getElementById('audit-close-btn')?.addEventListener('click', () => closeModal('audit-logs-modal'));
 document.getElementById('audit-done-btn')?.addEventListener('click', () => closeModal('audit-logs-modal'));
+
+document.getElementById('export-audit-csv-btn')?.addEventListener('click', async () => {
+  try {
+    // Fresh, uncapped fetch — the modal's own table is capped at 100 rows.
+    const res = await opsFetch('/admin/v1/audit-logs?limit=5000');
+    const data = await res.json();
+    if (!data.success) { showToast(data.error?.message || 'فشل تصدير السجل', 'error'); return; }
+    const headers = ['المشغل', 'الإجراء', 'النوع المستهدف', 'التفاصيل', 'IP', 'التاريخ'];
+    const rows = data.data.map(log => [
+      log.operator_name, actionLabelFor(log.action), log.target_type || '', log.details || '', log.ip_address || '', log.created_at || ''
+    ]);
+    exportTableToCSV(`audit-log-${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+  } catch (error) {
+    showToast('فشل الاتصال بالخادم أثناء تصدير السجل', 'error');
+  }
+});
+
+document.getElementById('export-audit-csv-btn')?.addEventListener('click', async () => {
+  try {
+    // Fresh, uncapped fetch — the modal's own table is capped at 100 rows.
+    const res = await opsFetch('/admin/v1/audit-logs?limit=5000');
+    const data = await res.json();
+    if (!data.success) { showToast(data.error?.message || 'فشل تصدير السجل', 'error'); return; }
+    const headers = ['المشغل', 'الإجراء', 'النوع المستهدف', 'التفاصيل', 'IP', 'التاريخ'];
+    const rows = data.data.map(log => [
+      log.operator_name, actionLabelFor(log.action), log.target_type || '', log.details || '', log.ip_address || '', log.created_at || ''
+    ]);
+    exportTableToCSV(`audit-log-${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+  } catch (error) {
+    showToast('فشل الاتصال بالخادم أثناء تصدير السجل', 'error');
+  }
+});
 
 // =============================================
 // CLINICS LIST — table, filters, onboarding
@@ -181,6 +378,14 @@ function applyTableFilters() {
 document.getElementById('table-search-input')?.addEventListener('input', applyTableFilters);
 document.getElementById('filter-plan')?.addEventListener('change', applyTableFilters);
 document.getElementById('filter-status')?.addEventListener('change', applyTableFilters);
+
+document.getElementById('export-clinics-csv-btn')?.addEventListener('click', () => {
+  const headers = ['الاسم', 'الرابط', 'التخصص', 'الباقة', 'الحالة', 'تاريخ الانتهاء', 'بريد المالك'];
+  const rows = allTenants.map(t => [
+    t.name, t.slug, t.specialty || '', t.subscription_plan || '', t.status || '', t.expires_at || '', t.owner_email || ''
+  ]);
+  exportTableToCSV(`clinics-${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+});
 
 function renderClinicsTable(tenants) {
   const tableBody = document.getElementById('clinics-table-body');

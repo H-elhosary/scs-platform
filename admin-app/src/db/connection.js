@@ -126,8 +126,10 @@ function setupSQLite() {
 }
 
 // admin-app shares clinic-app's SQLite file, which only bootstraps clinic
-// tables. Ensure the admin-only tables (audit trail, admin accounts) exist
-// too, so admin_audit_logs reads/writes don't fail against a missing table.
+// tables. Ensure the admin-only tables (audit trail, admin accounts, plans,
+// subscription/broadcast history) exist too, so admin-app's own queries
+// don't fail against a missing table, and extend the shared `tickets` table
+// with SLA/assignee columns the same non-destructive way.
 function ensureAdminTables() {
   sqliteDb.serialize(() => {
     sqliteDb.run(`CREATE TABLE IF NOT EXISTS admin_users (
@@ -150,6 +152,65 @@ function ensureAdminTables() {
       user_agent TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`);
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS plans (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      price_egp REAL DEFAULT 0,
+      price_usd REAL DEFAULT 0,
+      allow_multi_doctor INTEGER DEFAULT 0,
+      allow_insurance INTEGER DEFAULT 0,
+      allow_refunds INTEGER DEFAULT 0,
+      allow_whatsapp INTEGER DEFAULT 0,
+      allow_telegram INTEGER DEFAULT 0,
+      allow_analytics INTEGER DEFAULT 0,
+      allow_voice_bot INTEGER DEFAULT 0,
+      allow_custom_branding INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS subscription_history (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      old_plan TEXT,
+      new_plan TEXT,
+      old_expires_at TEXT,
+      new_expires_at TEXT,
+      reason TEXT,
+      changed_by_admin_id TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS admin_broadcast_logs (
+      id TEXT PRIMARY KEY,
+      admin_id TEXT,
+      subject TEXT NOT NULL,
+      message TEXT NOT NULL,
+      filter_plan TEXT DEFAULT 'all',
+      filter_status TEXT DEFAULT 'all',
+      channel TEXT DEFAULT 'both',
+      recipient_count INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    // Ticket SLA/assignee columns — tickets is bootstrapped by clinic-app,
+    // so admin-app extends it non-destructively (ALTER TABLE, swallowing
+    // the "duplicate column" error on repeat boots).
+    ['priority TEXT DEFAULT \'normal\'', 'assigned_to TEXT', 'due_at TEXT'].forEach(colDef => {
+      sqliteDb.run(`ALTER TABLE tickets ADD COLUMN ${colDef}`, (err) => {
+        if (err && !err.message.includes('duplicate column')) console.error('Failed to extend tickets table:', err.message);
+      });
+    });
+
+    // `tenants`/`users` (also bootstrapped by clinic-app) never got an
+    // `updated_at` column, so every admin-app route that does
+    // `UPDATE ... SET updated_at = CURRENT_TIMESTAMP` 500s against the real
+    // schema. Same non-destructive extension pattern as above.
+    sqliteDb.run(`ALTER TABLE tenants ADD COLUMN updated_at TEXT`, (err) => {
+      if (err && !err.message.includes('duplicate column')) console.error('Failed to extend tenants table:', err.message);
+    });
+    sqliteDb.run(`ALTER TABLE users ADD COLUMN updated_at TEXT`, (err) => {
+      if (err && !err.message.includes('duplicate column')) console.error('Failed to extend users table:', err.message);
+    });
 
     // Seed admin_users from the in-memory accounts so the audit-logs JOIN can
     // resolve operator names even before any write path targets this table.
@@ -158,6 +219,21 @@ function ensureAdminTables() {
       stmt.run(u.id, u.email, u.password_hash, u.full_name, u.role, u.status);
     });
     stmt.finalize();
+
+    // Seed plans from the same catalog used by the in-memory fallback, so
+    // the real `plans` table starts populated with Basic/Pro/Enterprise at
+    // their existing prices/feature-defaults. IDs must stay stable since
+    // `tenants.subscription_plan` free-text-references them.
+    const planStmt = sqliteDb.prepare(`INSERT OR IGNORE INTO plans
+      (id, name, price_egp, price_usd, allow_multi_doctor, allow_insurance, allow_refunds, allow_whatsapp, allow_telegram, allow_analytics, allow_voice_bot, allow_custom_branding)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    memoryDB.plans.forEach(p => {
+      planStmt.run(p.id, p.name, p.price_egp, p.price_usd,
+        p.allow_multi_doctor ? 1 : 0, p.allow_insurance ? 1 : 0, p.allow_refunds ? 1 : 0,
+        p.allow_whatsapp ? 1 : 0, p.allow_telegram ? 1 : 0, p.allow_analytics ? 1 : 0,
+        p.allow_voice_bot ? 1 : 0, p.allow_custom_branding ? 1 : 0);
+    });
+    planStmt.finalize();
   });
 }
 
@@ -165,7 +241,7 @@ initDatabase();
 
 // Promisified DB helpers
 const db = {
-  isMock: false,
+  get isMock() { return isMock; },
   memoryDB,
   getDbType: () => dbType,
 
@@ -228,8 +304,12 @@ const db = {
       return pgPool.query(text, params);
     }
     if (sqliteDb) {
+      // An UPDATE/INSERT/DELETE ... RETURNING statement yields rows just like a
+      // SELECT does — route it through db.all() too, or the RETURNING data is
+      // silently dropped (db.run() only reports lastID/changes, never rows).
       const isSelect = text.trim().toUpperCase().startsWith('SELECT');
-      if (isSelect) {
+      const hasReturning = /\bRETURNING\b/i.test(text);
+      if (isSelect || hasReturning) {
         const rows = await db.all(text, params);
         return { rows, rowCount: rows.length };
       } else {
