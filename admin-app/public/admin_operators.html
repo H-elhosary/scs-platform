@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>فريق العمليات — لوحة عمليات المنصة</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="core/core.css">
+  <link rel="stylesheet" href="core/ops.css">
+</head>
+<body class="clinic-body">
+  <div class="clinic-layout">
+    <main class="clinic-main">
+
+      <div class="view-header">
+        <div>
+          <h1><i class="fa-solid fa-user-shield"></i> فريق عمليات المنصة</h1>
+          <p class="view-subtitle">إدارة حسابات مشغلي المنصة وصلاحياتهم (Super Admin / Admin / Support). هذه الصفحة متاحة لمشغلي Super Admin فقط.</p>
+        </div>
+        <div class="view-header-actions">
+          <button id="add-operator-btn" class="btn-primary"><i class="fa-solid fa-plus"></i> إضافة مشغل جديد</button>
+        </div>
+      </div>
+
+      <div id="alert-panel" class="alert-box hide"><div class="alert-icon"><i class="fa-solid fa-triangle-exclamation"></i></div><div class="alert-msg" id="alert-msg"></div></div>
+
+      <section class="table-card">
+        <div class="table-header" style="display:flex; justify-content:space-between; align-items:center; padding:18px 20px; border-bottom:1px solid var(--scs-border);">
+          <h3 style="margin:0; font-size:15px; font-weight:700; color:var(--scs-text-heading);">سجل مشغلي المنصة</h3>
+        </div>
+        <div class="table-responsive">
+          <table class="clinic-table">
+            <thead><tr><th>الاسم</th><th>البريد الإلكتروني</th><th>الدرجة</th><th>الحالة</th><th>تاريخ الإضافة</th><th style="text-align:center;">إجراءات</th></tr></thead>
+            <tbody id="operators-table-body"><tr><td colspan="6" class="text-center" style="padding:24px; color:var(--scs-text-muted);">جاري تحميل البيانات...</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Modal: Add / Edit Operator -->
+  <div id="operator-modal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="operator-modal-title">إضافة مشغل جديد</h3>
+        <button class="modal-close" onclick="closeModal('operator-modal')">&times;</button>
+      </div>
+      <form id="operator-form">
+        <input type="hidden" id="operator-id" value="">
+        <div class="modal-body">
+          <div class="form-group"><label for="operator-full-name">الاسم الكامل</label><input type="text" id="operator-full-name" required autocomplete="off"></div>
+          <div class="form-group"><label for="operator-email">البريد الإلكتروني</label><input type="email" id="operator-email" required autocomplete="off"></div>
+          <div class="form-group" id="operator-password-group"><label for="operator-password">كلمة المرور</label><input type="password" id="operator-password" minlength="8" placeholder="8 أحرف على الأقل" autocomplete="new-password"></div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="operator-role">الدرجة الوظيفية</label>
+              <select id="operator-role" required>
+                <option value="support">Support — الدعم الفني فقط</option>
+                <option value="admin">Admin — إدارة يومية</option>
+                <option value="super_admin">Super Admin — صلاحية كاملة</option>
+              </select>
+            </div>
+            <div class="form-group" id="operator-status-group" style="display:none;">
+              <label for="operator-status">الحالة</label>
+              <select id="operator-status">
+                <option value="active">نشط</option>
+                <option value="inactive">موقوف</option>
+              </select>
+            </div>
+          </div>
+          <div class="alert-box" style="background:var(--scs-info-glow); border-color:#bae6fd; color:#0369a1;">
+            <div class="alert-icon"><i class="fa-solid fa-circle-info"></i></div>
+            <div>Super Admin وحده يملك صلاحية إدارة العيادات نهائياً وإدارة فريق العمليات. Admin يدير العيادات والباقات والتذاكر يومياً. Support يرى العيادات ويتعامل مع التذاكر فقط.</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary-cta" onclick="closeModal('operator-modal')">إلغاء</button>
+          <button type="submit" class="btn-primary" id="operator-submit-btn"><span class="btn-text">حفظ</span><div class="spinner hide"></div></button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="core/ops-shared.js"></script>
+  <script src="admin_operators.js"></script>
+</body>
+</html>

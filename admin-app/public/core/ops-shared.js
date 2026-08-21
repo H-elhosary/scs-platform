@@ -13,7 +13,9 @@ if (!opsToken) {
 }
 
 // Decode the operator's name/role out of the JWT payload (display only).
-let operatorUser = { full_name: 'مشغل النظام', role: 'Super Admin' };
+// `rawRole` drives real UI gating (server-side requireAdminRole is the real
+// enforcement); `role` is just the display label.
+let operatorUser = { full_name: 'مشغل النظام', role: 'Super Admin', rawRole: 'super_admin' };
 if (opsToken && opsToken.includes('.')) {
   try {
     const base64Url = opsToken.split('.')[1];
@@ -21,12 +23,22 @@ if (opsToken && opsToken.includes('.')) {
     const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
     const payloadObj = JSON.parse(jsonPayload);
     operatorUser.full_name = payloadObj.full_name || payloadObj.email || operatorUser.full_name;
-    operatorUser.role = payloadObj.role === 'super_admin' ? 'Super Admin' : 'Admin';
+    operatorUser.rawRole = payloadObj.role || 'admin';
+    operatorUser.role = { 
+      super_admin: 'Super Admin', 
+      admin: 'Operations Admin', 
+      support: 'Support Specialist',
+      finance: 'Finance Auditor'
+    }[operatorUser.rawRole] || 'Admin';
   } catch (e) { console.warn('Failed to parse token payload:', e); }
 }
 
 // Wrapper around fetch() that attaches the operator's bearer token to every
-// same-origin ops API call, and redirects to login on an expired/invalid session.
+// same-origin ops API call, and redirects to login only when the token itself
+// is invalid/expired (401). A 403 means a valid, logged-in operator hit a
+// route their role isn't permitted to use (e.g. support hitting an
+// admin/super_admin-only endpoint) — that's a normal permission error the
+// caller should show a message for, not a reason to nuke the whole session.
 async function opsFetch(url, options = {}) {
   const res = await fetch(url, {
     ...options,
@@ -36,7 +48,7 @@ async function opsFetch(url, options = {}) {
       ...(options.headers || {})
     }
   });
-  if (res.status === 401 || res.status === 403) {
+  if (res.status === 401) {
     sessionStorage.removeItem('ops_token');
     window.location.href = 'index.html';
     throw new Error('Session expired');
@@ -108,6 +120,18 @@ function injectOpsShell() {
         <i class="fa-solid fa-clipboard-list"></i>
         <span>الطلبات والشكاوى</span>
       </a>
+      <a href="admin_reports.html" class="sidebar-link" id="nav-reports">
+        <i class="fa-solid fa-chart-pie"></i>
+        <span>التقارير</span>
+      </a>
+      <a href="admin_broadcast.html" class="sidebar-link" id="nav-broadcast">
+        <i class="fa-solid fa-bullhorn"></i>
+        <span>بث جماعي</span>
+      </a>
+      <a href="admin_operators.html" class="sidebar-link" id="nav-operators" style="display:none;">
+        <i class="fa-solid fa-user-shield"></i>
+        <span>فريق العمليات</span>
+      </a>
     </nav>
 
     <div class="sidebar-footer">
@@ -127,6 +151,19 @@ function injectOpsShell() {
 
   layout.insertBefore(aside, layout.firstChild);
   highlightOpsActiveLink();
+
+  if (operatorUser.rawRole === 'super_admin') {
+    const opsLink = document.getElementById('nav-operators');
+    if (opsLink) opsLink.style.display = '';
+  }
+  if (operatorUser.rawRole === 'support') {
+    // Reports and broadcast are admin/super_admin-only server-side too.
+    ['nav-reports', 'nav-broadcast'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+  }
+  applyRoleBasedUI();
 
   document.getElementById('logout-btn').addEventListener('click', (e) => {
     e.preventDefault();
@@ -186,9 +223,41 @@ function highlightOpsActiveLink() {
     'admin_clinics.html': 'nav-clinics',
     'admin_plans.html': 'nav-plans',
     'admin_tickets.html': 'nav-tickets',
-    'clinic_details.html': 'nav-clinics'
+    'clinic_details.html': 'nav-clinics',
+    'admin_reports.html': 'nav-reports',
+    'admin_broadcast.html': 'nav-broadcast',
+    'admin_operators.html': 'nav-operators'
   }[filename] || 'nav-home';
   document.getElementById(activeLinkId)?.classList.add('active');
+}
+
+// Hides mutate-only controls for the `support` role, and blocks a non-super_admin
+// from staying on the super_admin-only operators page if they land on it directly.
+// Defense-in-depth only — the server's requireAdminRole checks are the real enforcement.
+function applyRoleBasedUI() {
+  const path = window.location.pathname;
+  const filename = path.substring(path.lastIndexOf('/') + 1) || 'admin.html';
+
+  if (filename === 'admin_operators.html' && operatorUser.rawRole !== 'super_admin') {
+    window.location.href = 'admin.html';
+    return;
+  }
+  if (['admin_reports.html', 'admin_broadcast.html'].includes(filename) && operatorUser.rawRole === 'support') {
+    window.location.href = 'admin.html';
+    return;
+  }
+
+  if (operatorUser.rawRole === 'support') {
+    const idsToHide = [
+      'add-clinic-btn', 'btn-add-new-plan', 'plan-config-delete-btn',
+      'det-delete-btn', 'det-toggle-status-btn', 'det-reset-pwd-btn',
+      'det-add-doc-btn', 'det-save-btn'
+    ];
+    idsToHide.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+  }
 }
 
 // 2. Notification bell — surfaces pending support tickets as ops notifications
@@ -321,6 +390,24 @@ function showToast(message, type = 'info') {
 
 function openModal(modalId) { document.getElementById(modalId)?.classList.add('open'); }
 function closeModal(modalId) { document.getElementById(modalId)?.classList.remove('open'); }
+
+// Generates and downloads a CSV file from already-fetched table data.
+// BOM prefix keeps Excel from mangling Arabic text.
+function exportTableToCSV(filename, headers, rows) {
+  const esc = v => {
+    const s = v == null ? '' : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csv = '﻿' + [headers, ...rows].map(r => r.map(esc).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 function showLoading(btnId) {
   const btn = document.getElementById(btnId);

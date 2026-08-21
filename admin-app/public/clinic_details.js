@@ -144,13 +144,13 @@ async function loadAllClinicData() {
       ? `<span style="color:var(--scs-danger);"><i class="fa-solid fa-triangle-exclamation"></i> منتهي منذ ${Math.abs(daysDiff)} يوم</span>`
       : `<span style="color:var(--primary);"><i class="fa-solid fa-circle-check"></i> متبقي ${daysDiff} يوم</span>`;
 
-    const stats = tenant.usage_stats || { total_patients: 0, total_appointments: 0, whatsapp_connection: 'disconnected', storage_used_mb: 0 };
+    const stats = tenant.usage_stats || { total_patients: 0, total_appointments: 0, whatsapp_connection: 'disconnected', doctor_count: 0 };
     document.getElementById('hero-patients-count').innerText = stats.total_patients;
     document.getElementById('hero-bookings-count').innerText = stats.total_appointments;
     document.getElementById('hero-whatsapp-status').innerHTML = stats.whatsapp_connection === 'connected'
       ? `<span style="color:var(--scs-success);"><i class="fa-brands fa-whatsapp"></i> متصل</span>`
       : `<span style="color:var(--scs-danger);"><i class="fa-brands fa-whatsapp"></i> غير متصل</span>`;
-    document.getElementById('hero-storage-used').innerText = `${stats.storage_used_mb} MB`;
+    document.getElementById('hero-doctors-count').innerText = stats.doctor_count;
 
     const statusBadge = document.getElementById('details-status-badge');
     if (tenant.status === 'suspended') {

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>التقارير — لوحة عمليات المنصة</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="core/core.css">
+  <link rel="stylesheet" href="core/ops.css">
+</head>
+<body class="clinic-body">
+  <div class="clinic-layout">
+    <main class="clinic-main">
+
+      <div class="view-header">
+        <div>
+          <h1><i class="fa-solid fa-chart-pie"></i> تقارير الإيرادات ومعدل التسرب</h1>
+          <p class="view-subtitle">اتجاه نشاط الاشتراكات ومعدل تعليق العيادات خلال آخر 12 شهراً.</p>
+        </div>
+        <div class="view-header-actions"></div>
+      </div>
+
+      <div class="alert-box" style="background:var(--scs-info-glow); border-color:#bae6fd; color:#0369a1; margin-bottom:20px;">
+        <div class="alert-icon"><i class="fa-solid fa-circle-info"></i></div>
+        <div>
+          هذا التقرير تقديري: لا يوجد نظام فوترة فعلي في المنصة حالياً، لذا القيم المالية هنا مبنية على سعر كل باقة <strong>الحالي</strong> مضروباً في عدد أحداث تغيير/تجديد الاشتراك في كل شهر (وليس سجل فواتير حقيقي)، ومعدل التسرب هو نسبة حالات التعليق في الشهر إلى إجمالي عدد العيادات الحالي (وليس معدلاً محسوباً على أفواج مشتركين).
+        </div>
+      </div>
+
+      <section class="reports-grid">
+        <div class="report-card">
+          <div class="report-card-header"><h3><i class="fa-solid fa-chart-line" style="color:var(--primary);"></i> اتجاه نشاط الاشتراكات (تقديري)</h3></div>
+          <div class="report-card-body">
+            <div class="table-responsive">
+              <table class="clinic-table">
+                <thead><tr><th>الشهر</th><th>Basic</th><th>Pro</th><th>Enterprise</th><th>القيمة التقديرية</th></tr></thead>
+                <tbody id="revenue-trend-body"><tr><td colspan="5" class="text-center" style="padding:20px; color:var(--scs-text-muted);">جاري التحميل...</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="report-card">
+          <div class="report-card-header"><h3><i class="fa-solid fa-user-slash" style="color:var(--scs-danger);"></i> اتجاه تعليق العيادات (Churn)</h3></div>
+          <div class="report-card-body">
+            <div class="table-responsive">
+              <table class="clinic-table">
+                <thead><tr><th>الشهر</th><th>حالات تعليق</th><th>حالات تنشيط</th><th>معدل التسرب</th></tr></thead>
+                <tbody id="churn-trend-body"><tr><td colspan="4" class="text-center" style="padding:20px; color:var(--scs-text-muted);">جاري التحميل...</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="core/ops-shared.js"></script>
+  <script src="admin_reports.js"></script>
+</body>
+</html>

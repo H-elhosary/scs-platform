@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>الرئيسية — لوحة عمليات المنصة</title>
+  <title>لوحة قيادة العمليات والمنصة — Smart Clinic OS</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Outfit:wght@400;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="core/core.css">
 </head>
@@ -14,93 +14,135 @@
   <div class="clinic-layout">
     <main class="clinic-main">
 
+      <!-- Compact page header (same pattern as every other ops page) -->
       <div class="view-header">
         <div>
-          <h1><i class="fa-solid fa-chart-line"></i> إحصائيات وأداء المنصة</h1>
-          <p class="view-subtitle">لوحة مشغل النظام لمتابعة نمو العيادات، الدخل المتكرر، وإجراءات الأمان السريعة.</p>
+          <h1><i class="fa-solid fa-gauge-high"></i> <span id="header-greeting-text">مرحباً بك،</span> <span id="header-operator-name"></span></h1>
+          <p class="view-subtitle" id="header-role-desc"></p>
         </div>
         <div class="view-header-actions"></div>
       </div>
 
-      <div id="alert-panel" class="alert-box hide"><div class="alert-icon"><i class="fa-solid fa-triangle-exclamation"></i></div><div class="alert-msg" id="alert-msg"></div></div>
-
-      <!-- KPIs -->
-      <section class="kpi-grid">
-        <div class="clinic-kpi-card">
-          <div class="kpi-icon-wrap" style="background:var(--scs-primary-glow); color:var(--primary);"><i class="fa-solid fa-hospital"></i></div>
-          <div class="kpi-details"><span class="kpi-label">إجمالي العيادات</span><h3 class="kpi-value" id="kpi-total-clinics">-</h3></div>
-        </div>
-        <div class="clinic-kpi-card">
-          <div class="kpi-icon-wrap" style="background:var(--scs-success-glow); color:var(--scs-success);"><i class="fa-solid fa-circle-check"></i></div>
-          <div class="kpi-details"><span class="kpi-label">العيادات النشطة</span><h3 class="kpi-value" id="kpi-active-clinics">-</h3></div>
-        </div>
-        <div class="clinic-kpi-card">
-          <div class="kpi-icon-wrap" style="background:var(--scs-danger-glow); color:var(--scs-danger);"><i class="fa-solid fa-circle-pause"></i></div>
-          <div class="kpi-details"><span class="kpi-label">العيادات المعلقة</span><h3 class="kpi-value" id="kpi-suspended-clinics">-</h3></div>
-        </div>
-        <div class="clinic-kpi-card">
-          <div class="kpi-icon-wrap" style="background:var(--scs-warning-glow); color:var(--scs-warning);"><i class="fa-solid fa-triangle-exclamation"></i></div>
-          <div class="kpi-details"><span class="kpi-label">اشتراكات تنتهي قريباً</span><h3 class="kpi-value" id="kpi-expiring-soon">-</h3></div>
-        </div>
-      </section>
-
-      <!-- Quick actions + audit preview -->
-      <div style="display:flex; gap:20px; margin-top:20px; flex-wrap:wrap;">
-        <div class="table-card" style="flex:1; min-width:300px; padding:22px; height:fit-content;">
-          <h3 style="font-size:15px; font-weight:700; color:var(--scs-text-heading); margin:0 0 16px; display:flex; align-items:center; gap:8px;"><i class="fa-solid fa-bolt" style="color:var(--primary);"></i> إجراءات سريعة</h3>
-          <div style="display:flex; flex-direction:column; gap:10px;">
-            <a href="admin_clinics.html?action=add" class="btn-primary" style="justify-content:center; text-decoration:none;"><i class="fa-solid fa-plus"></i> إضافة عيادة جديدة للمنصة</a>
-            <a href="admin_plans.html" class="btn-secondary-cta" style="justify-content:center; text-decoration:none;"><i class="fa-solid fa-gem"></i> تهيئة وتعديل الباقات</a>
-            <button class="btn-secondary-cta" id="btn-quick-view-audit" style="justify-content:center;"><i class="fa-solid fa-list-check"></i> عرض سجل العمليات كامل</button>
-          </div>
-        </div>
-
-        <div class="table-card" style="flex:2; min-width:420px; padding:22px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-            <h3 style="font-size:15px; font-weight:700; color:var(--scs-text-heading); margin:0; display:flex; align-items:center; gap:8px;"><i class="fa-solid fa-shield-halved" style="color:var(--scs-success);"></i> أحدث عمليات الأمان والمنصة</h3>
-            <button class="btn-outline-cta" id="btn-view-all-audits" style="font-size:11.5px; padding:6px 12px;">عرض الكل</button>
-          </div>
-          <div class="table-responsive" style="max-height:250px; overflow-y:auto;">
-            <table class="clinic-table">
-              <thead><tr><th>المشغل</th><th>نوع العملية</th><th>التفاصيل</th><th>التاريخ</th></tr></thead>
-              <tbody id="home-audit-logs-body"><tr><td colspan="4" class="text-center" style="padding:20px; color:var(--scs-text-muted);">جاري تحميل العمليات...</td></tr></tbody>
-            </table>
-          </div>
-        </div>
+      <!-- Global Alert Panel -->
+      <div id="alert-panel" class="alert-box hide">
+        <div class="alert-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+        <div class="alert-msg" id="alert-msg"></div>
       </div>
 
-      <!-- Reports -->
-      <section class="reports-grid" style="margin-top:20px;">
-        <div class="report-card">
-          <div class="report-card-header">
-            <h3>تقارير الإيرادات والدخل المتكرر</h3>
-            <div class="report-badge"><i class="fa-solid fa-sack-dollar"></i> الدخل الشهري المتكرر (MRR): <strong id="report-mrr-value">-</strong></div>
-          </div>
-          <div class="report-card-body">
-            <div class="revenue-breakdown">
-              <div class="rev-item"><span class="plan-badge plan-basic">BASIC</span><span class="rev-plan-details" id="rev-basic-details">0 عيادة ($0/شهر)</span></div>
-              <div class="rev-item"><span class="plan-badge plan-pro">PRO</span><span class="rev-plan-details" id="rev-pro-details">0 عيادة ($0/شهر)</span></div>
-              <div class="rev-item"><span class="plan-badge plan-enterprise">ENTERPRISE</span><span class="rev-plan-details" id="rev-enterprise-details">0 عيادة ($0/شهر)</span></div>
+      <!-- Needs-Attention: only takes visual space when there's something to act on.
+           Real, actionable data (overdue tickets, expiring subscriptions) — no filler cards. -->
+      <div id="attention-grid" style="margin-bottom: 20px;"></div>
+
+      <!-- Dynamic Role-Tailored KPI Grid -->
+      <section class="kpi-grid" id="ops-kpi-grid">
+        <div class="kpi-card-rich">
+          <div class="kpi-top">
+            <span class="kpi-title-sub">إجمالي العيادات المسجلة</span>
+            <div class="kpi-icon-badge" style="background: var(--scs-primary-glow); color: var(--primary);">
+              <i class="fa-solid fa-hospital"></i>
             </div>
+          </div>
+          <div class="kpi-main-val" id="kpi-total-clinics">-</div>
+          <div>
+            <span class="kpi-trend trend-neutral"><i class="fa-solid fa-cubes"></i> مساحات عمل معزولة</span>
           </div>
         </div>
 
-        <div class="report-card">
-          <div class="report-card-header"><h3>توزيع خطط الاشتراكات للعيادات</h3></div>
-          <div class="report-card-body">
-            <div class="distribution-bars">
-              <div class="dist-bar-wrapper"><div class="dist-label"><span>Basic</span><span class="dist-perc" id="dist-basic-perc">0%</span></div><div class="dist-progress-bg"><div class="dist-progress-bar bg-slate" id="dist-basic-bar" style="width:0%;"></div></div></div>
-              <div class="dist-bar-wrapper"><div class="dist-label"><span>Pro</span><span class="dist-perc" id="dist-pro-perc">0%</span></div><div class="dist-progress-bg"><div class="dist-progress-bar bg-purple" id="dist-pro-bar" style="width:0%;"></div></div></div>
-              <div class="dist-bar-wrapper"><div class="dist-label"><span>Enterprise</span><span class="dist-perc" id="dist-enterprise-perc">0%</span></div><div class="dist-progress-bg"><div class="dist-progress-bar bg-orange" id="dist-enterprise-bar" style="width:0%;"></div></div></div>
+        <div class="kpi-card-rich">
+          <div class="kpi-top">
+            <span class="kpi-title-sub">العيادات النشطة حالياً</span>
+            <div class="kpi-icon-badge" style="background: var(--scs-success-glow); color: var(--scs-success);">
+              <i class="fa-solid fa-circle-check"></i>
             </div>
+          </div>
+          <div class="kpi-main-val" id="kpi-active-clinics">-</div>
+          <div>
+            <span class="kpi-trend trend-up"><i class="fa-solid fa-arrow-trend-up"></i> اشتراكات سارية</span>
+          </div>
+        </div>
+
+        <div class="kpi-card-rich">
+          <div class="kpi-top">
+            <span class="kpi-title-sub">العيادات المعلقة</span>
+            <div class="kpi-icon-badge" style="background: var(--scs-danger-glow); color: var(--scs-danger);">
+              <i class="fa-solid fa-circle-pause"></i>
+            </div>
+          </div>
+          <div class="kpi-main-val" id="kpi-suspended-clinics">-</div>
+          <div>
+            <span class="kpi-trend trend-warn"><i class="fa-solid fa-triangle-exclamation"></i> تحتاج لتجديد أو تنشيط</span>
+          </div>
+        </div>
+
+        <div class="kpi-card-rich">
+          <div class="kpi-top">
+            <span class="kpi-title-sub" id="kpi-fourth-label">الدخل المتكرر (MRR)</span>
+            <div class="kpi-icon-badge" style="background: rgba(245, 158, 11, 0.1); color: #d97706;" id="kpi-fourth-icon">
+              <i class="fa-solid fa-sack-dollar"></i>
+            </div>
+          </div>
+          <div class="kpi-main-val" id="kpi-fourth-value">-</div>
+          <div>
+            <span class="kpi-trend trend-up" id="kpi-fourth-trend"><i class="fa-solid fa-chart-line"></i> نمو الاشتراك المتوقع</span>
           </div>
         </div>
       </section>
+
+      <!-- Recent Clinics — the one piece of operational detail that earns a permanent
+           spot on the home page. Full clinics list, plans, tickets, reports, broadcast
+           and operators are one click away via the sidebar (no need to repeat them here
+           as a second set of shortcut tiles), and the audit log is one click away via
+           the button below (no need for a second table permanently on screen). -->
+      <div class="table-card" style="padding: 22px; margin-top: 24px;">
+        <div class="table-filter-bar">
+          <div>
+            <h3 style="font-size: 15px; font-weight: 800; color: var(--scs-text-heading); margin: 0 0 4px 0; display: flex; align-items: center; gap: 8px;">
+              <i class="fa-solid fa-hospital-user" style="color: var(--primary);"></i>
+              <span>العيادات المحدثة والمنضمة حديثاً</span>
+            </h3>
+            <p style="font-size: 12px; color: var(--scs-text-muted); margin: 0;">نظرة سريعة على العيادات ومتابعة حالتها</p>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button class="btn-outline-cta" id="btn-view-all-audits" style="font-size: 11.5px; padding: 5px 10px;">
+              <i class="fa-solid fa-shield-halved"></i> سجل العمليات
+            </button>
+            <a href="admin_clinics.html" class="btn-outline-cta" style="font-size: 11.5px; padding: 5px 10px; text-decoration: none;">
+              عرض كل العيادات <i class="fa-solid fa-arrow-left"></i>
+            </a>
+          </div>
+        </div>
+
+        <div class="search-input-wrap" style="margin-bottom: 14px;">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" id="quick-clinic-search" placeholder="بحث سريع عن عيادة بالاسم أو التخصص أو البريد...">
+        </div>
+
+        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+          <table class="clinic-table">
+            <thead>
+              <tr>
+                <th>العيادة</th>
+                <th>التخصص</th>
+                <th>الباقة</th>
+                <th>الحالة</th>
+                <th>الإجراء</th>
+              </tr>
+            </thead>
+            <tbody id="home-clinics-body">
+              <tr>
+                <td colspan="5" class="text-center" style="padding: 24px; color: var(--scs-text-muted);">
+                  <i class="fa-solid fa-spinner fa-spin"></i> جاري تحميل العيادات...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
 
     </main>
   </div>
 
-  <!-- Modal: Audit Logs -->
+  <!-- Modal: Audit Logs View -->
   <div id="audit-logs-modal" class="modal-overlay">
     <div class="modal-content modal-lg">
       <div class="modal-header">
@@ -110,12 +152,24 @@
       <div class="modal-body">
         <div class="table-responsive" style="max-height:420px; overflow-y:auto;">
           <table class="clinic-table">
-            <thead><tr><th>المشغل</th><th>العملية</th><th>الهدف</th><th>التفاصيل</th><th>عنوان IP</th><th>التاريخ</th></tr></thead>
+            <thead>
+              <tr>
+                <th>المشغل</th>
+                <th>العملية</th>
+                <th>الهدف</th>
+                <th>التفاصيل</th>
+                <th>عنوان IP</th>
+                <th>التاريخ</th>
+              </tr>
+            </thead>
             <tbody id="audit-logs-table-body"></tbody>
           </table>
         </div>
       </div>
-      <div class="modal-footer"><button type="button" class="btn-primary" id="audit-done-btn">موافق</button></div>
+      <div class="modal-footer">
+        <button type="button" class="btn-outline-cta" id="export-audit-csv-btn"><i class="fa-solid fa-file-csv"></i> تصدير CSV</button>
+        <button type="button" class="btn-primary" id="audit-done-btn">موافق</button>
+      </div>
     </div>
   </div>
 
